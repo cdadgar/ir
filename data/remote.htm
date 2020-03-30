@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel='stylesheet' href='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css'>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js'></script>
+<script src='common.js'></script>
+<script>
+$(document).ready(function(){
+  initGui();
+  initWebsocket('remote');
+});
+
+function message(msg){
+  console.log('onmessage ' + msg.data);
+  var obj = JSON.parse(msg.data);
+}
+
+function initGui() {
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
+    document.body.style.zoom = '305%';
+  else
+    document.body.style.zoom = '150%';
+
+  $('#vizio_power').button().click(function(event) {
+    var json = {
+      command: 'vizio_power'
+    };
+    socket.send(JSON.stringify(json));
+  });
+
+  $('#vizio_volume_up').button().click(function(event) {
+    var json = {
+      command: 'vizio_volume_up'
+    };
+    socket.send(JSON.stringify(json));
+  });
+
+  $('#vizio_volume_down').button().click(function(event) {
+    var json = {
+      command: 'vizio_volume_down'
+    };
+    socket.send(JSON.stringify(json));
+  });
+
+  $('#vizio_mute').button().click(function(event) {
+    var json = {
+      command: 'vizio_mute'
+    };
+    socket.send(JSON.stringify(json));
+  });
+
+  $('#soundbar_power').button().click(function(event) {
+    var json = {
+      command: 'soundbar_power'
+    };
+    socket.send(JSON.stringify(json));
+  });
+
+  $('#cancel').button().click(function(event) {
+    close();
+  });
+}
+
+function close() {
+  window.location.href='index.htm';
+}
+</script>
+</head>
+<body>
+<div id='message' style='zoom:200%;'></div>
+<div id='controls'>
+  Vizio TV
+  <button id='vizio_power'>Power</button>
+  <br><br>
+  Volume
+  <button id='vizio_volume_up'>Up</button><button id='vizio_volume_down'>Down</button>
+  <button id='vizio_mute'>Mute</button>
+  <br><br>
+  Soundbar
+  <button id='soundbar_power'>Power</button>
+  <br><br>
+  <button id='cancel'>Cancel</button>
+</div>
+</body>
+</html>

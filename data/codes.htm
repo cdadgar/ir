@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel='stylesheet' href='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css'>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js'></script>
+<script src='common.js'></script>
+<style>
+.nameCol {
+  width: 100px;
+  display: inline-block;
+}
+.valueCol {
+  width: 300px;
+  display: inline-block;
+}
+.deleteCol {
+  width: 45px;
+  display: inline-block;
+}
+</style>
+<script>
+var codes;
+var socket;
+
+$(document).ready(function(){
+  initWebsocket('codes');
+});
+
+function message(msg){
+  console.log('onmessage ' + msg.data);
+  var obj = JSON.parse(msg.data);
+  
+  if (obj.command == 'codes') {
+    codes = obj.value;
+    initGui();
+    loadCodes();
+  }
+  else if (obj.command == 'code') {
+    $(':focus').val(obj.value);
+  }
+}
+
+function initGui(){
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
+    document.body.style.zoom = '240%';
+  else
+    document.body.style.zoom = '120%';
+
+  $('#new').button().click(function(event) {
+    var c = $('#codes');
+	c.append(addRow(['','']));
+  });
+
+  $('#delete').button().click(function() {
+    $( ".rowCb:checked" ).each(function(index, element) {
+	  $(element).parent().remove();
+	});
+	$('#all').prop('checked', false);
+  });
+
+  $('#save').button().click(function() {
+  // check for empty fields, also check for dupe names
+    doSave();
+    close();
+  });
+
+  $('#cancel').button().click(function() {
+    close();
+  });
+}
+
+function close() {
+  window.location.href='index.htm';
+}
+
+function doSave() {
+  codes = [];
+  $('.field').each(function(index, element) {
+    if (index % 2 === 0)
+	  code = [element.value]
+	else {
+	  code.push(element.value);
+      codes.push(code);
+	}
+  });
+
+  var json = {
+    command: 'saveCodes',
+	num: codes.length,
+    codes: codes
+  };
+  socket.send(JSON.stringify(json));
+}
+
+function addRow(code) {
+  var str = "<div><input class='field nameCol' value='" + code[0] + "'></input>";
+  str += "<input class='field valueCol' value='" + code[1] + "'></input>";
+  str += "<input type='checkbox' class='rowCb deleteCol'></input></div>";
+  return str;
+}
+
+function loadCodes() {
+  var c = $('#codes');
+  var str = "<label class='nameCol' align='center'>Name</label>" +
+    "<label align='center' class='valueCol'>Value</label>" +
+	"<input type='checkbox' class='deleteCol' id='all' style='margin-left: 12px;'></input><br>";
+  for (var i=0; i < codes.length; ++i) {
+    str += addRow(codes[i]);
+  }
+  c.append(str);
+
+  $('#all').change(function() {
+	$('.rowCb').prop('checked', this.checked);
+  });  
+}
+</script>
+</head>
+<body>
+<div id='message' style='zoom:200%;'></div>
+<div id='controls'>
+  <div id='codes'></div><br>
+  <button id='new'>New</button>
+  <button id='delete'>Delete</button>
+  <br><br>
+  <button id='save'>Save</button>
+  <button id='cancel'>Cancel</button>
+</div>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel='stylesheet' href='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css'>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js'></script>
+<script src='common.js'></script>
+<script>
+var timer = undefined;
+
+$(document).ready(function(){
+  initGui();
+  initWebsocket('');
+});
+
+function message(msg){
+  console.log('onmessage ' + msg.data);
+  var obj = JSON.parse(msg.data);
+  var extra = '';
+  if (obj.value != '' && (obj.command == 'currentTemp')) {
+    if (obj.value == '-999.0')
+	  return;
+    extra = '&deg;';
+  }
+  if (obj.command === 'code') {
+    // remove the code a few seconds later
+	if (timer) {
+	  clearTimeout(timer);
+	}
+	timer = setTimeout(function() {
+      $('#'+obj.command).html('');
+	  timer = undefined;
+	}, 3000);
+  }
+  $('#'+obj.command).html(obj.value + extra);
+}
+
+function initGui(){
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
+    document.body.style.zoom = '420%';
+  else
+    document.body.style.zoom = '150%';
+
+  $('#codes').button().click(function(event) {
+    window.location.href='codes.htm';
+  });
+
+  $('#remote').button().click(function(event) {
+    window.location.href='remote.htm';
+  });
+
+ $('#setup').button().click(function(event) {
+    window.location.href='setup.htm';
+  });
+}
+</script>
+</head>
+<body>
+<div id='message' style='zoom:200%;'></div>
+<div id='controls'>
+  <div style='zoom:200%;'>
+   <span id='time' class='ui-widget'></span><br>
+   <span id='currentTemp' class='ui-widget'></span><br>
+   &nbsp;<span id='movement' class='ui-widget'></span><span id='code' class='ui-widget'></span>
+  </div>
+  <button id='codes'>Codes</button>
+  <button id='remote'>Remote</button>
+  <button id='setup'>Setup</button>
+</div>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="icon" type="image/x-icon" href="favicon.ico"/>
+<link rel='stylesheet' href='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/themes/smoothness/jquery-ui.css'>
+<style>
+#span {
+  width: 30px;
+}
+#host_name {
+  width: 90px;
+}
+#mqtt_ip_addr {
+  width: 90px;
+}
+#mqtt_ip_port {
+  width: 30px;
+}
+</style>
+<script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js'></script>
+<script src='https://ajax.googleapis.com/ajax/libs/jqueryui/1.11.4/jquery-ui.min.js'></script>
+<script src='common.js'></script>
+<script>
+$(document).ready(function(){
+  initGui();
+  initWebsocket('setup');
+});
+
+function message(msg){
+  console.log('onmessage ' + msg.data);
+  var obj = JSON.parse(msg.data);
+    
+  $('#date').html(obj.date);
+  $('#time').html(obj.time);
+  $('#host_name').val(obj.host_name);
+  $('#mqtt_ip_addr').val(obj.mqtt_ip_addr);
+  $('#mqtt_ip_port').val(obj.mqtt_ip_port);
+}
+
+function initGui() {
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
+    document.body.style.zoom = '305%';
+  else
+    document.body.style.zoom = '150%';
+
+  $('#save').button().click(function(event) {
+    doSave();
+    close();
+  });
+
+  $('#ota').button().click(function(event) {
+    window.location.href='update';
+  });
+
+  $('#spiffs').button().click(function(event) {
+    window.location.href='edit.htm';
+  });
+
+  $('#reboot').button().click(function(event) {
+    var json = {
+      command: 'reboot'
+    };
+    socket.send(JSON.stringify(json)); 
+  });
+
+  $('#cancel').button().click(function(event) {
+    close();
+  });
+}
+
+function doSave() {
+  var json = {
+    command: 'save',
+	host_name: $('#host_name').val(),
+	mqtt_ip_addr: $('#mqtt_ip_addr').val(),
+	mqtt_ip_port: $('#mqtt_ip_port').val()
+  };
+  console.log(JSON.stringify(json));
+  socket.send(JSON.stringify(json)); 
+}
+
+function close() {
+  window.location.href='index.htm';
+}
+</script>
+</head>
+<body>
+<div id='message' style='zoom:200%;'></div>
+<div id='controls'>
+  Compiled:<br><label id='date'></label>,<label id='time'></label><br>
+  Host Name:<input id='host_name'><br>
+  MQTT IP Address:<input id='mqtt_ip_addr'><br>
+  MQTT Port:<input id='mqtt_ip_port'><br>
+  <br>
+  <button id='spiffs'>SPIFFS</button>
+  <button id='ota'>OTA Update</button><br><br>
+  <button id='reboot'>Reboot</button><br><br>
+  <button id='save'>Save</button>
+  <button id='cancel'>Cancel</button>
+</div>
+</body>
+</html>
