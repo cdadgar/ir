@@ -165,11 +165,13 @@ typedef struct {
 
 configType config;
 
-#define MAX_CODES 30
+#define MAX_CODES 50
 
 typedef struct {
   char name[13];
-  char value[12];
+  decode_type_t type;
+  uint64_t data;
+  uint16_t nbits;
 } codeType;
 
 codeType code[MAX_CODES];
@@ -282,7 +284,9 @@ void loadCodeConfig(void) {
       *ptr = EEPROM.read(addr);
   }
   for (int i=0; i < numCodes; ++i)
-    Serial.printf("code %d: %s %s\n", (i+1), code[i].name, code[i].value);
+    Serial.printf("code %d: %s %s %s %d\n",
+      (i+1), code[i].name, irutils::typeToString(code[i].type, false),
+      code[i].data, code[i].nbits);
 }
 
 
@@ -478,12 +482,13 @@ void printIRreceiver(void) {
 }
 
 
-char *getValue(const char *name) {
+codeType getCode(const char *name) {
   for (int i=0; i < numCodes; ++i) {
-//    Serial.printf("code %d, compare %s and %s, match %d, value %s\n",
-//      i, code[i].name, name, strcmp(code[i].name, name), code[i].value); 
+//    Serial.printf("code %d, compare %s and %s, match %d, type %s, data %s, nbits %d\n",
+//      i, code[i].name, name, strcmp(code[i].name, name),
+//      irutils::typeToString(code[i].type, false), code[i].data, code[i].nbits); 
     if (strcmp(code[i].name, name) == 0) {
-      return code[i].value;
+      return code[i];
     }
   }
   return NULL;
@@ -1123,26 +1128,21 @@ void callback(char* topic, byte* payload, unsigned int length) {
   name[length] = '\0';
   Serial.printf("Message arrived [%s] %s\n", topic, name);
   
-  char *value = getValue(name);
-  if (value == NULL) {
+  codeType code = getCode(name);
+  if (code == NULL) {
     Serial.printf("Unknown code\n");
     return;  
   }
   
-  Serial.printf("ir value is %s\n", value);
-  uint64_t n;
-  sscanf(value, "%lx", &n);
+  Serial.printf("ir: type %s, data %s, nbits %d\n", 
+    irutils::typeToString(code.type, false), code.data, code.nbits);
   // ignore receiving this command we're sending out
   irrecv.disableIRIn();  // Stop the receiver
-  irsend.sendNEC(n);   // send the code out
+  irsend.send(code.type, code.data, code.nbits, 1);   // send the code out
   irrecv.enableIRIn();  // Start the receiver
 
   // also send to main display
   if (webClient != -1) {
     sendWeb("code", name);
   }
-  
-//#define VIZIO_MUTE     0x20DF906F
-//  irsend.sendNEC(VIZIO_MUTE);
-//  irsend.sendRaw(SOUNDBAR_POWER, 77, 38);  // Send a raw data capture at 38kHz.
 }

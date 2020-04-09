@@ -11,8 +11,16 @@
   width: 100px;
   display: inline-block;
 }
+.protocolCol {
+  width: 100px;
+  display: inline-block;
+}
 .valueCol {
-  width: 300px;
+  width: 100px;
+  display: inline-block;
+}
+.lengthCol {
+  width: 100px;
   display: inline-block;
 }
 .deleteCol {
@@ -50,7 +58,7 @@ function initGui(){
 
   $('#new').button().click(function(event) {
     var c = $('#codes');
-	c.append(addRow(['','']));
+	c.append(addRow(['','','','']));
   });
 
   $('#delete').button().click(function() {
@@ -78,13 +86,16 @@ function close() {
 function doSave() {
   codes = [];
   $('.field').each(function(index, element) {
-    if (index % 2 === 0)
+    if (index % 4 === 0)
 	  code = [element.value]
 	else {
 	  code.push(element.value);
-      codes.push(code);
+      if (index % 4 === 3) { 
+        codes.push(code);
+	  }
 	}
   });
+  console.log('codes',codes);
 
   var json = {
     command: 'saveCodes',
@@ -96,7 +107,9 @@ function doSave() {
 
 function addRow(code) {
   var str = "<div><input class='field nameCol' value='" + code[0] + "'></input>";
-  str += "<input class='field valueCol' value='" + code[1] + "'></input>";
+  str += "<input class='field protocolCol' value='" + code[1] + "'></input>";
+  str += "<input class='field valueCol' value='" + code[2] + "'></input>";
+  str += "<input class='field lengthCol' value='" + code[3] + "'></input>";
   str += "<input type='checkbox' class='rowCb deleteCol'></input></div>";
   return str;
 }
@@ -104,8 +117,10 @@ function addRow(code) {
 function loadCodes() {
   var c = $('#codes');
   var str = "<label class='nameCol' align='center'>Name</label>" +
+    "<label align='center' class='protocolCol'>Protocol</label>" +
     "<label align='center' class='valueCol'>Value</label>" +
-	"<input type='checkbox' class='deleteCol' id='all' style='margin-left: 12px;'></input><br>";
+    "<label align='center' class='lengthCol'># Bits</label>" +
+	"<input type='checkbox' class='deleteCol' id='all' style='margin-left: 20px;'></input><br>";
   for (var i=0; i < codes.length; ++i) {
     str += addRow(codes[i]);
   }
