@@ -6,8 +6,7 @@
 /*
  * todo:
  * - add nightlite code - motor on/off, light setting (what is the cycle?)  (2 output pins)
- * - ir codes aren't decoded correctly consistantly, look at full demo demo
- * - what do the other things in the arduino tools menu do?
+ * - fix codes screen to capture type, data, and # bits
  * 
  * notes:
  * - disable windows antivirus running when this is compiling...its killing the machine
@@ -88,6 +87,7 @@ Timezone myTZ(myDST, mySTD);
 #include <IRsend.h>
 #include <IRrecv.h>
 #include <IRutils.h>
+
 
 IRsend irsend(D7);
 IRrecv irrecv(D5);
@@ -285,7 +285,7 @@ void loadCodeConfig(void) {
   }
   for (int i=0; i < numCodes; ++i)
     Serial.printf("code %d: %s %s %s %d\n",
-      (i+1), code[i].name, irutils::typeToString(code[i].type, false),
+      (i+1), code[i].name, typeToString(code[i].type, false).c_str(),
       code[i].data, code[i].nbits);
 }
 
@@ -448,25 +448,21 @@ void checkIRreceiver(void) {
 
 
 void printIRreceiver(void) {
-  // print() & println() can't handle printing long longs. (uint64_t)
-  uint64_t number = results.value;
-  unsigned long long1 = (unsigned long)((number & 0xFFFF0000) >> 16 );
-  unsigned long long2 = (unsigned long)((number & 0x0000FFFF));
-  String hex = String(long1, HEX) + String(long2, HEX);
+  const char *typeS = typeToString(results.decode_type, results.repeat).c_str();
+  const char *dataS = resultToHexidecimal(&results).c_str();
+  const char *nbitsS = uint64ToString(results.bits).c_str();
   
-//  serialPrintUint64(results.value, HEX);
-  Serial.print("received IR: ");
-  Serial.println(hex);
-
-  const char *code = hex.c_str();
+  Serial.printf("received IR: %s %s %s\n", typeS, dataS, nbitsS);
 
   // if the codes page is connected, sent it the value
   // otherwise, look up the code for the command, and send to mqtt
   if (codesClient != -1) {
-    send(codesClient, "code", code);
+    send(codesClient, "type", typeS);
+    send(codesClient, "data", dataS);
+    send(codesClient, "nbits", nbitsS);
   }
   else {
-    char *name = getName(code);
+    char *name = getName();
     if (name != NULL) {
       // mqtt
       char topic[20];
@@ -481,29 +477,38 @@ void printIRreceiver(void) {
   }
 }
 
+// dupe of resultToHexidecimal, but without the result struct
+String resultToHexidecimal2(uint64_t data) {
+  String output = F("0x");
+  output += uint64ToString(data, 16);
+  return output;
+}
 
-codeType getCode(const char *name) {
+
+char *getName(void) {
   for (int i=0; i < numCodes; ++i) {
-//    Serial.printf("code %d, compare %s and %s, match %d, type %s, data %s, nbits %d\n",
-//      i, code[i].name, name, strcmp(code[i].name, name),
-//      irutils::typeToString(code[i].type, false), code[i].data, code[i].nbits); 
-    if (strcmp(code[i].name, name) == 0) {
-      return code[i];
+    codeType c = code[i];
+    const char *typeS = typeToString(c.type, false).c_str();
+    const char *dataS = resultToHexidecimal2(c.data).c_str();
+    const char *nbitsS = uint64ToString(c.nbits).c_str();
+    Serial.printf("comparing %d: %s %s %s %s\n",
+      i, typeS, dataS, nbitsS, c.name); 
+
+    if (c.type == results.decode_type && c.data == results.value) {
+      return c.name;
     }
   }
   return NULL;
 }
 
 
-char *getName(const char *value) {
+int getCodeIndex(const char *name) {
   for (int i=0; i < numCodes; ++i) {
-//    Serial.printf("code %d, compare %s and %s, match %d, name %s\n",
-//      i, code[i].value, value, strcmp(code[i].value, value), code[i].name); 
-    if (strcmp(code[i].value, value) == 0) {
-      return code[i].name;
+    if (strcmp(code[i].name, name) == 0) {
+      return i;
     }
   }
-  return NULL;
+  return -1;
 }
 
 
@@ -799,8 +804,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         char json[1024];
         strcpy(json, "{\"command\":\"codes\",\"value\":[");
         for (int i=0; i < numCodes; ++i) {
-          sprintf(json+strlen(json), "%s[\"%s\",\"%s\"]", (i==0)?"":",",
-            code[i].name, code[i].value);
+//          sprintf(json+strlen(json), "%s[\"%s\",\"%s\"]", (i==0)?"":",",
+//            code[i].name, code[i].value);
         }
         strcpy(json+strlen(json), "]}");
         //Serial.printf("len %d\n", strlen(json));
@@ -880,15 +885,15 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           target = "codes";
           ptr = strstr((char *)payload, target) + strlen(target)+5;
           for (int i=0; i < numCodes; ++i) {
-            char *end = strchr(ptr, '\"');
-            memcpy(code[i].name, ptr, (end-ptr));
-            code[i].name[end-ptr] = '\0';
-            ptr = end+3;
-            end = strchr(ptr, '\"');
-            memcpy(code[i].value, ptr, (end-ptr));
-            code[i].value[end-ptr] = '\0';
-            ptr = end+5;
-            Serial.printf("'%s' '%s'\n", code[i].name, code[i].value);
+//            char *end = strchr(ptr, '\"');
+//            memcpy(code[i].name, ptr, (end-ptr));
+//            code[i].name[end-ptr] = '\0';
+//            ptr = end+3;
+//            end = strchr(ptr, '\"');
+//            memcpy(code[i].value, ptr, (end-ptr));
+//            code[i].value[end-ptr] = '\0';
+//            ptr = end+5;
+//            Serial.printf("'%s' '%s'\n", code[i].name, code[i].value);
           }      
           saveCodeConfig();
         }
@@ -1128,17 +1133,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   name[length] = '\0';
   Serial.printf("Message arrived [%s] %s\n", topic, name);
   
-  codeType code = getCode(name);
-  if (code == NULL) {
+  int index = getCodeIndex(name);
+  if (index == -1) {
     Serial.printf("Unknown code\n");
     return;  
   }
   
-  Serial.printf("ir: type %s, data %s, nbits %d\n", 
-    irutils::typeToString(code.type, false), code.data, code.nbits);
   // ignore receiving this command we're sending out
   irrecv.disableIRIn();  // Stop the receiver
-  irsend.send(code.type, code.data, code.nbits, 1);   // send the code out
+  codeType c = code[index];
+  Serial.printf("ir: type %s, data %s, nbits %d\n", typeToString(c.type, false).c_str(), c.data, c.nbits);
+  irsend.send(c.type, c.data, c.nbits, 1);   // send the code out
   irrecv.enableIRIn();  // Start the receiver
 
   // also send to main display
