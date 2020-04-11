@@ -284,9 +284,7 @@ void loadCodeConfig(void) {
       *ptr = EEPROM.read(addr);
   }
   for (int i=0; i < numCodes; ++i)
-    Serial.printf("code %d: %s %s %s %d\n",
-      (i+1), code[i].name, typeToString(code[i].type, false).c_str(),
-      code[i].data, code[i].nbits);
+    Serial.printf("code %d: %s\n", (i+1), printCode(code[i]));
 }
 
 
@@ -447,32 +445,54 @@ void checkIRreceiver(void) {
 }
 
 
+char *printCode(codeType c) {
+    String typeS = typeToString(c.type, false);
+    String dataS = resultToHexidecimal2(c.data);
+    String nbitsS = uint64ToString(c.nbits);
+    const char *type = typeS.c_str();
+    const char *data = dataS.c_str();
+    const char *nbits = nbitsS.c_str();
+    char value[128];
+    sprintf(value, "%s %s %s %s", c.name, type, data, nbits);
+    return value;
+}
+
+
 void printIRreceiver(void) {
-  const char *typeS = typeToString(results.decode_type, results.repeat).c_str();
-  const char *dataS = resultToHexidecimal(&results).c_str();
-  const char *nbitsS = uint64ToString(results.bits).c_str();
+  String typeS = typeToString(results.decode_type, results.repeat);
+  String dataS = resultToHexidecimal(&results);
+  String nbitsS = uint64ToString(results.bits);
+  const char *type = typeS.c_str();
+  const char *data = dataS.c_str();
+  const char *nbits = nbitsS.c_str();
   
-  Serial.printf("received IR: %s %s %s\n", typeS, dataS, nbitsS);
+  Serial.printf("received IR: %s %s %s\n", type, data, nbits);
 
   // if the codes page is connected, sent it the value
   // otherwise, look up the code for the command, and send to mqtt
   if (codesClient != -1) {
-    send(codesClient, "type", typeS);
-    send(codesClient, "data", dataS);
-    send(codesClient, "nbits", nbitsS);
+    char json[128];
+    sprintf(json, "{\"command\":\"code\",\"value\":{\"type\":\"%s\",\"data\":\"%s\",\"nbits\":\"%s\"}}",
+      type, data, nbits);
+    webSocket.sendTXT(codesClient, json, strlen(json));
   }
   else {
-    char *name = getName();
-    if (name != NULL) {
+    int index = getCodeFromResult();
+    if (index != -1) {
+      codeType c = code[index];
       // mqtt
+      Serial.printf("publish to mqtt: %s\n", c.name);
       char topic[20];
       sprintf(topic, "%s/ir", config.host_name);
-      client.publish(topic, name);
+      client.publish(topic, c.name);
 
       // also send to main display
       if (webClient != -1) {
-        sendWeb("code", name);
+        sendWeb("code", c.name);
       }
+    }
+    else {
+      Serial.printf("no match\n");
     }
   }
 }
@@ -485,20 +505,16 @@ String resultToHexidecimal2(uint64_t data) {
 }
 
 
-char *getName(void) {
+int getCodeFromResult(void) {
   for (int i=0; i < numCodes; ++i) {
     codeType c = code[i];
-    const char *typeS = typeToString(c.type, false).c_str();
-    const char *dataS = resultToHexidecimal2(c.data).c_str();
-    const char *nbitsS = uint64ToString(c.nbits).c_str();
-    Serial.printf("comparing %d: %s %s %s %s\n",
-      i, typeS, dataS, nbitsS, c.name); 
-
+    Serial.printf("comparing %d: %s\n", i, printCode(c)); 
     if (c.type == results.decode_type && c.data == results.value) {
-      return c.name;
+      Serial.printf("found match with %s\n", c.name);
+      return i;
     }
   }
-  return NULL;
+  return -1;
 }
 
 
@@ -674,18 +690,6 @@ bool setupWifi(void) {
   return true;
 }
 
-
-// Vizio Tv - NEC encoding
-#define VIZIO_POWER    0x20DF10EF
-#define VIZIO_VOL_UP   0x20DF40BF
-#define VIZIO_VOL_DOWN 0x20DFC03F
-#define VIZIO_MUTE     0x20DF906F
-
-// Samsung soundbar - unknown encoding
-uint16_t SOUNDBAR_POWER[77]    = {4518, 4488,  502, 502,  504, 498,  502, 502,  502, 500,  504, 1502,  504, 1502,  504, 498,  502, 504,  502, 1504,  504, 1500,  502, 1504,  500, 1504,  506, 498,  504, 500,  504, 498,  504, 500,  506, 4494,  500, 502,  504, 500,  502, 502,  502, 498,  506, 500,  528, 476,  504, 498,  530, 476,  528, 1478,  500, 1506,  502, 1502,  500, 502,  530, 1476,  504, 1500,  502, 1506,  502, 1502,  528, 476,  502, 502,  504, 498,  530, 1480,  500};  // UNKNOWN CA31DA45
-
-
-
 void setupTime(void) {
   Serial.println(F("Getting time"));
 
@@ -754,6 +758,18 @@ void setupTime(void) {
 }
 
 
+// cpd...get rid of these
+// Vizio Tv - NEC encoding
+#define VIZIO_POWER    0x20DF10EF
+#define VIZIO_VOL_UP   0x20DF40BF
+#define VIZIO_VOL_DOWN 0x20DFC03F
+#define VIZIO_MUTE     0x20DF906F
+
+// Samsung soundbar - unknown encoding
+uint16_t SOUNDBAR_POWER[77]    = {4518, 4488,  502, 502,  504, 498,  502, 502,  502, 500,  504, 1502,  504, 1502,  504, 498,  502, 504,  502, 1504,  504, 1500,  502, 1504,  500, 1504,  506, 498,  504, 500,  504, 498,  504, 500,  506, 4494,  500, 502,  504, 500,  502, 502,  502, 498,  506, 500,  528, 476,  504, 498,  530, 476,  528, 1478,  500, 1506,  502, 1502,  500, 502,  530, 1476,  504, 1500,  502, 1506,  502, 1502,  528, 476,  502, 502,  504, 498,  530, 1480,  500};  // UNKNOWN CA31DA45
+
+
+
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
   switch(type) {
     case WStype_DISCONNECTED:
@@ -804,8 +820,16 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         char json[1024];
         strcpy(json, "{\"command\":\"codes\",\"value\":[");
         for (int i=0; i < numCodes; ++i) {
-//          sprintf(json+strlen(json), "%s[\"%s\",\"%s\"]", (i==0)?"":",",
-//            code[i].name, code[i].value);
+          codeType c = code[i];
+          String typeS = typeToString(c.type, false);
+          String dataS = resultToHexidecimal2(c.data);
+          String nbitsS = uint64ToString(c.nbits);
+          const char *type = typeS.c_str();
+          const char *data = dataS.c_str();
+          const char *nbits = nbitsS.c_str();
+          sprintf(json+strlen(json), "%s[\"%s\",\"%s\",\"%s\",\"%s\"]",
+            (i==0)?"":",",
+            c.name, type, data, nbits);
         }
         strcpy(json+strlen(json), "]}");
         //Serial.printf("len %d\n", strlen(json));
@@ -882,25 +906,57 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
           numCodes = strtol(ptr, &ptr, 10);
           Serial.printf("got %d codes\n", numCodes);
 
+          char type[20];
+          char data[20];
+          char nbits[20];
           target = "codes";
           ptr = strstr((char *)payload, target) + strlen(target)+5;
           for (int i=0; i < numCodes; ++i) {
-//            char *end = strchr(ptr, '\"');
-//            memcpy(code[i].name, ptr, (end-ptr));
-//            code[i].name[end-ptr] = '\0';
-//            ptr = end+3;
-//            end = strchr(ptr, '\"');
-//            memcpy(code[i].value, ptr, (end-ptr));
-//            code[i].value[end-ptr] = '\0';
-//            ptr = end+5;
-//            Serial.printf("'%s' '%s'\n", code[i].name, code[i].value);
-          }      
+            char *end = strchr(ptr, '\"');
+            memcpy(code[i].name, ptr, (end-ptr));
+            code[i].name[end-ptr] = '\0';
+            ptr = end+3;
+            end = strchr(ptr, '\"');
+            memcpy(type, ptr, (end-ptr));
+            type[end-ptr] = '\0';
+            ptr = end+3;
+            end = strchr(ptr, '\"');
+            memcpy(data, ptr, (end-ptr));
+            data[end-ptr] = '\0';
+            ptr = end+3;
+            end = strchr(ptr, '\"');
+            memcpy(nbits, ptr, (end-ptr));
+            nbits[end-ptr] = '\0';
+            ptr = end+5;
+            Serial.printf("'%s' '%s' '%s' '%s'\n", code[i].name, type, data, nbits);
+            code[i].type = strToDecodeType(type);
+            code[i].data = getUInt64fromHex(data+2); 
+            code[i].nbits = strtoul(nbits, NULL, 10); 
+            Serial.printf("got code: %s\n", printCode(code[i]));
+          }
           saveCodeConfig();
         }
       }
       break;
   }
 }
+
+
+uint64_t getUInt64fromHex(char const *str) {
+    uint64_t accumulator = 0;
+    for (size_t i = 0 ; isxdigit((unsigned char)str[i]) ; ++i) {
+        char c = str[i];
+        accumulator *= 16;
+        if (isdigit(c)) /* '0' .. '9'*/
+            accumulator += c - '0';
+        else if (isupper(c)) /* 'A' .. 'F'*/
+            accumulator += c - 'A' + 10;
+        else /* 'a' .. 'f'*/
+            accumulator += c - 'a' + 10;
+    }
+    return accumulator;
+}
+
 
 void sendWeb(const char *command, const char *value) {
   send(webClient, command, value);
@@ -1142,7 +1198,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   // ignore receiving this command we're sending out
   irrecv.disableIRIn();  // Stop the receiver
   codeType c = code[index];
-  Serial.printf("ir: type %s, data %s, nbits %d\n", typeToString(c.type, false).c_str(), c.data, c.nbits);
+  Serial.printf("ir: %s\n", printCode(c));
   irsend.send(c.type, c.data, c.nbits, 1);   // send the code out
   irrecv.enableIRIn();  // Start the receiver
 

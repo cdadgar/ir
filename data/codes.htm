@@ -16,7 +16,7 @@
   display: inline-block;
 }
 .valueCol {
-  width: 100px;
+  width: 150px;
   display: inline-block;
 }
 .lengthCol {
@@ -46,7 +46,18 @@ function message(msg){
     loadCodes();
   }
   else if (obj.command == 'code') {
-    $(':focus').val(obj.value);
+    // ignore repeat commands
+    if (obj.value.type.endsWith('(Repeat)'))
+	  return;
+
+	// populate the row values
+    var row = $(':focus').parent();
+	row.find('.protocolCol').val(obj.value.type);
+	row.find('.valueCol').val(obj.value.data);
+	row.find('.lengthCol').val(obj.value.nbits);
+	
+	// set focus back on the name field
+	row.find(".nameCol").focus();
   }
 }
 
@@ -58,7 +69,12 @@ function initGui(){
 
   $('#new').button().click(function(event) {
     var c = $('#codes');
-	c.append(addRow(['','','','']));
+	var row = addRow(['','','','']);
+	c.append(row);
+	// set focus to the name field in the new row
+	var div = c.children(":last-child");
+	var name = div.children(":first-child");
+	name.focus();
   });
 
   $('#delete').button().click(function() {
