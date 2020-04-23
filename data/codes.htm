@@ -63,7 +63,7 @@ function message(msg){
 
 function initGui(){
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent))
-    document.body.style.zoom = '240%';
+    document.body.style.zoom = '180%';
   else
     document.body.style.zoom = '120%';
 
@@ -84,6 +84,35 @@ function initGui(){
 	$('#all').prop('checked', false);
   });
 
+  $('#sort').button().click(function() {
+    codes = getCodes();
+	console.log(codes);
+	codes.sort((a, b) => a[0].localeCompare(b[0]));
+	console.log('sorted',codes);
+	loadCodes();
+  });
+
+  $('#send').button().click(function() {
+    var sel = $( ".rowCb:checked" );
+	if (sel.length !== 1) {
+      alert('Select one row');
+	  return;
+	}
+	
+	var code = [];
+	var row = $(sel[0]).parent();
+	row.children('.field').each(function(index, element) {
+	  code.push(element.value);
+	});
+	console.log(code);
+
+    var json = {
+      command: 'sendCode',
+      code: code
+    };
+    socket.send(JSON.stringify(json));
+  });
+
   $('#save').button().click(function() {
   // check for empty fields, also check for dupe names
     doSave();
@@ -99,18 +128,23 @@ function close() {
   window.location.href='index.htm';
 }
 
-function doSave() {
-  codes = [];
+function getCodes() {
+  var c = [];
   $('.field').each(function(index, element) {
     if (index % 4 === 0)
 	  code = [element.value]
 	else {
 	  code.push(element.value);
       if (index % 4 === 3) { 
-        codes.push(code);
+        c.push(code);
 	  }
 	}
   });
+  return c;
+}
+
+function doSave() {
+  codes = getCodes();
   console.log('codes',codes);
 
   var json = {
@@ -132,6 +166,7 @@ function addRow(code) {
 
 function loadCodes() {
   var c = $('#codes');
+  c.empty();
   var str = "<label class='nameCol' align='center'>Name</label>" +
     "<label align='center' class='protocolCol'>Protocol</label>" +
     "<label align='center' class='valueCol'>Value</label>" +
@@ -154,6 +189,8 @@ function loadCodes() {
   <div id='codes'></div><br>
   <button id='new'>New</button>
   <button id='delete'>Delete</button>
+  <button id='sort'>Sort</button>
+  <button id='send'>Send</button>
   <br><br>
   <button id='save'>Save</button>
   <button id='cancel'>Cancel</button>

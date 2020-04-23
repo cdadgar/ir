@@ -22,44 +22,23 @@ function initGui() {
     document.body.style.zoom = '305%';
   else
     document.body.style.zoom = '150%';
+	
+  $('button').button().click(function(event) {
+    var btn = $(this);
+	var command = btn.attr('command');
+	if (!command) {
+      command = btn.text();
+	}
+	if (command == 'Cancel') {
+      close();
+	  return;
+	}
 
-  $('#vizio_power').button().click(function(event) {
     var json = {
-      command: 'vizio_power'
+      command: command
     };
+	console.log('send', JSON.stringify(json));
     socket.send(JSON.stringify(json));
-  });
-
-  $('#vizio_volume_up').button().click(function(event) {
-    var json = {
-      command: 'vizio_volume_up'
-    };
-    socket.send(JSON.stringify(json));
-  });
-
-  $('#vizio_volume_down').button().click(function(event) {
-    var json = {
-      command: 'vizio_volume_down'
-    };
-    socket.send(JSON.stringify(json));
-  });
-
-  $('#vizio_mute').button().click(function(event) {
-    var json = {
-      command: 'vizio_mute'
-    };
-    socket.send(JSON.stringify(json));
-  });
-
-  $('#soundbar_power').button().click(function(event) {
-    var json = {
-      command: 'soundbar_power'
-    };
-    socket.send(JSON.stringify(json));
-  });
-
-  $('#cancel').button().click(function(event) {
-    close();
   });
 }
 
@@ -72,16 +51,29 @@ function close() {
 <div id='message' style='zoom:200%;'></div>
 <div id='controls'>
   Vizio TV
-  <button id='vizio_power'>Power</button>
+  <button>Power</button>
   <br><br>
   Volume
-  <button id='vizio_volume_up'>Up</button><button id='vizio_volume_down'>Down</button>
-  <button id='vizio_mute'>Mute</button>
+  <button command='Vol-Up'>Up</button><button command='Vol-Down'>Down</button>
+  <button>Mute</button>
   <br><br>
   Soundbar
-  <button id='soundbar_power'>Power</button>
+  <button command='SB-Power'>Power</button>
   <br><br>
-  <button id='cancel'>Cancel</button>
+  Kodi
+  <button>Up</button>
+  <button>Down</button>
+  <button>Left</button>
+  <br>
+  <button>Right</button>
+  <button>Stop</button>
+  <button>Play</button>
+  <br>
+  <button>Select</button>
+  <button>Menu</button>
+  <button>Exit</button>
+  <br><br>
+  <button>Cancel</button>
 </div>
 </body>
 </html>

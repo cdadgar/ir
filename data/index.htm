@@ -23,6 +23,12 @@ function message(msg){
 	  return;
     extra = '&deg;';
   }
+  
+  if (obj.command == 'nightlight') {
+    $('#' + obj.command + obj.value).prop('checked', true).button('refresh');
+    return;
+  }
+  
   if (obj.command === 'code') {
     // remove the code a few seconds later
 	if (timer) {
@@ -53,6 +59,17 @@ function initGui(){
  $('#setup').button().click(function(event) {
     window.location.href='setup.htm';
   });
+  
+  $('#nightlight').buttonset();
+  
+  $(':radio').click(function() {
+    var json = {
+      command: this.name,
+      value: this.value
+    };
+	console.log('sending', JSON.stringify(json));
+    socket.send(JSON.stringify(json));
+  });
 }
 </script>
 </head>
@@ -63,6 +80,11 @@ function initGui(){
    <span id='time' class='ui-widget'></span><br>
    <span id='currentTemp' class='ui-widget'></span><br>
    &nbsp;<span id='movement' class='ui-widget'></span><span id='code' class='ui-widget'></span>
+  </div>
+  <div id='nightlight'>
+    <label for='nightlight' class='ui-widget'>Nightlight:</label>
+    <input type='radio' id='nightlight0' name='nightlight' value='0'><label for='nightlight0'>Off</label>
+    <input type='radio' id='nightlight1' name='nightlight' value='1'><label for='nightlight1'>On</label>
   </div>
   <button id='codes'>Codes</button>
   <button id='remote'>Remote</button>

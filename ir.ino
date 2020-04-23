@@ -5,7 +5,6 @@
 
 /*
  * todo:
- * - add nightlite code - motor on/off, light setting (what is the cycle?)  (2 output pins)
  * - fix codes screen to capture type, data, and # bits
  * 
  * notes:
@@ -17,7 +16,7 @@
  *     installed bonjour service from apple.  run bonjour browser to see if the esp is there
  *     ran some regedit command to fix some mdns issue.  (and reboot)
  *     seems very finicky
- *     also, as the ota starts, the web socker gets closed, so there is no way to send status to the browser...pity
+ *     also, as the ota starts, the web socket gets closed, so there is no way to send status to the browser...pity
  *     why is it closed?
  * 3 types: (listed simpliest to implement to most complex)
  * 1. ota update via arduino ide (see ArduinoOTA) -> works, but hard to get the network esp to show up in arduino ide
@@ -143,8 +142,12 @@ float lastTemp = TEMP_ERROR;
 bool isTimeSet = false;
 unsigned long lastMinutes;
 
+// see https://escapequotes.net/esp8266-wemos-d1-mini-pins-and-diagram/ for pinout
 #define PIR 16     // D0
 int pirState = LOW;
+
+#define NIGHTLIGHT 5     // D1
+int nightlightState = LOW;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -190,14 +193,15 @@ void setup() {
   Serial.println( __TIME__);
 
   // must specify amount of eeprom to use (max is 4k?)
-  EEPROM.begin(512);
+  EEPROM.begin(4*1024);
   
   loadConfig();
   loadCodeConfig();
   isMemoryReset = false;
 
-  if (!setupTemperature())
-    return;
+  if (!setupTemperature()) {
+//    return;
+  }
     
   if (!setupWifi())
     return;
@@ -218,6 +222,9 @@ void setup() {
   lastMinutes = 0;
 
   pinMode(PIR, INPUT);
+
+  pinMode(NIGHTLIGHT, OUTPUT);
+  digitalWrite(NIGHTLIGHT, nightlightState);
 
   isSetup = true;
 }
@@ -283,8 +290,10 @@ void loadCodeConfig(void) {
     for (int i = 0; i < sizeof(codeType) * numCodes; ++i, ++ptr, ++addr)
       *ptr = EEPROM.read(addr);
   }
-  for (int i=0; i < numCodes; ++i)
-    Serial.printf("code %d: %s\n", (i+1), printCode(code[i]));
+  for (int i=0; i < numCodes; ++i) {
+    Serial.printf("code %d: ", (i+1));
+    printCode(code[i]);
+  }
 }
 
 
@@ -312,17 +321,22 @@ void saveCodeConfig(void) {
   isPromModified = false;
   Serial.printf("saving codes to eeprom\n");
   int addr = CODE_SIZE_ADDRESS;
+  Serial.printf("num codes %d\n", numCodes);
   byte *ptr = (byte *)&numCodes;
   for (int i = 0; i < sizeof(numCodes); ++i, ++ptr, ++addr)
     update(addr, *ptr);
 
   addr = CODE_ADDRESS;
   ptr = (byte *)&code;
-  for (int i = 0; i < sizeof(codeType) * numCodes; ++i, ++ptr, ++addr)
+  int num = sizeof(codeType) * numCodes;
+  Serial.printf("code bytes %d\n", num);
+  for (int i = 0; i < num; ++i, ++ptr, ++addr)
     update(addr, *ptr);
 
-  if (isPromModified)
+  if (isPromModified) {
+    Serial.printf("calling prom commit\n");
     EEPROM.commit();
+  }
 }
 
 
@@ -445,16 +459,12 @@ void checkIRreceiver(void) {
 }
 
 
-char *printCode(codeType c) {
-    String typeS = typeToString(c.type, false);
-    String dataS = resultToHexidecimal2(c.data);
-    String nbitsS = uint64ToString(c.nbits);
-    const char *type = typeS.c_str();
-    const char *data = dataS.c_str();
-    const char *nbits = nbitsS.c_str();
-    char value[128];
-    sprintf(value, "%s %s %s %s", c.name, type, data, nbits);
-    return value;
+void printCode(codeType c) {
+  Serial.print(typeToString(c.type, false));
+  Serial.print(" ");
+  Serial.print(resultToHexidecimal2(c.data));
+  Serial.print(" ");
+  Serial.println(uint64ToString(c.nbits));
 }
 
 
@@ -465,7 +475,8 @@ void printIRreceiver(void) {
   const char *type = typeS.c_str();
   const char *data = dataS.c_str();
   const char *nbits = nbitsS.c_str();
-  
+
+  // cpd...test this with samsumg36 power (soundbar)
   Serial.printf("received IR: %s %s %s\n", type, data, nbits);
 
   // if the codes page is connected, sent it the value
@@ -508,7 +519,8 @@ String resultToHexidecimal2(uint64_t data) {
 int getCodeFromResult(void) {
   for (int i=0; i < numCodes; ++i) {
     codeType c = code[i];
-    Serial.printf("comparing %d: %s\n", i, printCode(c)); 
+    Serial.printf("comparing %d: ", i);
+    printCode(c); 
     if (c.type == results.decode_type && c.data == results.value) {
       Serial.printf("found match with %s\n", c.name);
       return i;
@@ -576,6 +588,14 @@ void checkTime(unsigned long time) {
  
   lastMinutes = minutes;
   printTime();
+}
+
+
+void printNightlight() {
+  if (webClient == -1)
+    return;
+
+  sendWeb("nightlight", nightlightState ? "1" : "0");
 }
 
 
@@ -758,19 +778,14 @@ void setupTime(void) {
 }
 
 
-// cpd...get rid of these
-// Vizio Tv - NEC encoding
-#define VIZIO_POWER    0x20DF10EF
-#define VIZIO_VOL_UP   0x20DF40BF
-#define VIZIO_VOL_DOWN 0x20DFC03F
-#define VIZIO_MUTE     0x20DF906F
+// 38kHz carrier frequency (soundbar, tv)
+#define KHZ_38 38
 
-// Samsung soundbar - unknown encoding
-uint16_t SOUNDBAR_POWER[77]    = {4518, 4488,  502, 502,  504, 498,  502, 502,  502, 500,  504, 1502,  504, 1502,  504, 498,  502, 504,  502, 1504,  504, 1500,  502, 1504,  500, 1504,  506, 498,  504, 500,  504, 498,  504, 500,  506, 4494,  500, 502,  504, 500,  502, 502,  502, 498,  506, 500,  528, 476,  504, 498,  530, 476,  528, 1478,  500, 1506,  502, 1502,  500, 502,  530, 1476,  504, 1500,  502, 1506,  502, 1502,  528, 476,  502, 502,  504, 498,  530, 1480,  500};  // UNKNOWN CA31DA45
+// 56kHz carrier frequency for the xbox usb dongle?  (not verified)
+#define KHZ_56 56 
 
 
-
-void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght) {
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
       Serial.printf("[%u] Disconnected!\n", num);
@@ -795,6 +810,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         // send the current state
         printCurrentTemperature();
         printTime();
+        printNightlight();
       }
       else if (strcmp((char *)payload,"/setup") == 0) {
         setupClient = num;
@@ -844,6 +860,21 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
 
       if (num == webClient) {
         // no commands on main page
+        const char *target = "command";
+        char *ptr = strstr((char *)payload, target) + strlen(target)+3;
+        if (strncmp(ptr,"nightlight",10) == 0) {
+          target = "value";
+          ptr = strstr(ptr, target) + strlen(target)+3;
+          int value = strtol(ptr, &ptr, 10);
+          nightlightState = (value == 0) ? LOW : HIGH;
+          digitalWrite(NIGHTLIGHT, nightlightState);
+          Serial.printf("nightlight %d\n", nightlightState);
+
+          // mqtt
+          char topic[30];
+          sprintf(topic, "%s/nightlight", config.host_name);
+          client.publish(topic, ((nightlightState == LOW) ? "off" : "on"));
+        }
       }
       else if (num == setupClient) {
         const char *target = "command";
@@ -877,22 +908,147 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
         }
       }
       else if (num == remoteClient) {
+// cpd...fix thes with stored codes (lookup by name)
         const char *target = "command";
         char *ptr = strstr((char *)payload, target) + strlen(target)+3;
-        if (strncmp(ptr,"vizio_power",11) == 0) {
-          irsend.sendNEC(VIZIO_POWER);
+        if (strncmp(ptr,"Power",5) == 0) {
+//Protocol  : NEC
+//Code      : 0x20DF10EF (32 Bits)
+uint16_t rawData[71] = {8910, 4450,  572, 562,  550, 562,  548, 1652,  574, 562,  550, 562,  550, 562,  550, 562,  550, 562,  550, 1656,  570, 1650,  574, 562,  550, 1654,  572, 1650,  576, 1650,  576, 1650,  574, 1654,  574, 560,  550, 562,  550, 562,  550, 1654,  572, 562,  550, 562,  548, 562,  550, 562,  550, 1650,  576, 1652,  574, 1648,  576, 562,  550, 1650,  576, 1652,  574, 1652,  576, 1650,  574, 39560,  8910, 2238,  574};  // NEC 20DF10EF
+//uint32_t address = 0x4;
+//uint32_t command = 0x8;
+//uint64_t data = 0x20DF10EF;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendNEC(data);
+//            irsend.send(NEC, data, 32, 1);
         }
-        else if (strncmp(ptr,"vizio_volume_up",15) == 0) {
-          irsend.sendNEC(VIZIO_VOL_UP);
+        else if (strncmp(ptr,"Vol-Up",6) == 0) {
+//Protocol  : NEC
+//Code      : 0x20DF40BF (32 Bits)
+uint16_t rawData[67] = {8954, 4466,  550, 592,  524, 592,  524, 1686,  550, 592,  524, 592,  524, 592,  524, 592,  524, 592,  524, 1688,  548, 1684,  550, 592,  524, 1684,  550, 1686,  550, 1686,  550, 1688,  548, 1684,  552, 592,  524, 1686,  548, 592,  524, 594,  524, 592,  524, 592,  524, 592,  524, 592,  524, 1686,  550, 592,  524, 1686,  548, 1686,  550, 1686,  550, 1686,  550, 1684,  552, 1688,  548};  // NEC 20DF40BF
+//uint32_t address = 0x4;
+//uint32_t command = 0x2;
+//uint64_t data = 0x20DF40BF;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendNEC(data);
+//            irsend.send(NEC, data, 32, 1);
         }
-        else if (strncmp(ptr,"vizio_volume_down",17) == 0) {
-          irsend.sendNEC(VIZIO_VOL_DOWN);
+        else if (strncmp(ptr,"Vol-Down",7) == 0) {
+//Protocol  : NEC
+//Code      : 0x20DFC03F (32 Bits)
+uint16_t rawData[67] = {8954, 4464,  552, 592,  524, 592,  550, 1660,  550, 590,  524, 592,  550, 566,  524, 592,  548, 568,  524, 1684,  552, 1684,  576, 566,  526, 1684,  552, 1684,  552, 1684,  576, 1658,  552, 1684,  578, 1656,  554, 1682,  578, 566,  524, 592,  524, 592,  526, 590,  524, 592,  524, 594,  524, 592,  550, 566,  550, 1658,  578, 1658,  552, 1684,  576, 1660,  576, 1660,  576, 1658,  580};  // NEC 20DFC03F
+//uint32_t address = 0x4;
+//uint32_t command = 0x3;
+//uint64_t data = 0x20DFC03F;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendNEC(data);
+//            irsend.send(NEC, data, 32, 1);
         }
-        else if (strncmp(ptr,"vizio_mute",10) == 0) {
-          irsend.sendNEC(VIZIO_MUTE);
+        else if (strncmp(ptr,"Mute",4) == 0) {
+//Protocol  : NEC
+//Code      : 0x20DF906F (32 Bits)
+uint16_t rawData[67] = {8952, 4466,  550, 594,  524, 592,  524, 1682,  552, 592,  524, 592,  524, 592,  524, 592,  524, 592,  524, 1684,  552, 1684,  552, 592,  524, 1684,  550, 1686,  550, 1684,  552, 1684,  550, 1686,  550, 1682,  552, 592,  524, 592,  524, 1684,  550, 592,  524, 592,  524, 592,  524, 592,  524, 592,  524, 1686,  550, 1684,  552, 592,  524, 1684,  552, 1684,  550, 1684,  552, 1686,  548};  // NEC 20DF906F
+//uint32_t address = 0x4;
+//uint32_t command = 0x9;
+//uint64_t data = 0x20DF906F;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendNEC(data);
+//            irsend.send(NEC, data, 32, 1);
         }
-        else if (strncmp(ptr,"soundbar_power",14) == 0) {
-          irsend.sendRaw(SOUNDBAR_POWER, 77, 38);  // Send a raw data capture at 38kHz.
+        else if (strncmp(ptr,"SB-Power",8) == 0) {
+//Protocol  : SAMSUNG36
+//Code      : 0xCF000EF1 (36 Bits)
+uint16_t rawData[77] = {4490, 4512,  504, 522,  480, 524,  480, 524,  480, 524,  480, 1528,  480, 1526,  480, 526,  480, 524,  480, 1526,  482, 1526,  480, 1528,  480, 1526,  480, 524,  480, 524,  480, 524,  480, 524,  480, 4496,  504, 524,  480, 524,  480, 524,  480, 524,  480, 524,  480, 524,  478, 524,  480, 524,  480, 1526,  480, 1526,  480, 1528,  478, 524,  480, 1528,  480, 1526,  480, 1526,  480, 1528,  480, 524,  480, 524,  480, 524,  480, 1526,  480};  // SAMSUNG36 CF000EF1
+//uint32_t address = 0xCF0;
+//uint32_t command = 0xEF1;
+//uint64_t data = 0xCF000EF1;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendSamsung36(data);
+//            irsend.send(SAMSUNG36, data, 32, 1);
+        }
+        else if (strncmp(ptr,"Up",2) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAA6559 (24 Bits)
+uint16_t rawData[51] = {3872, 4098,  374, 1116,  374, 2090,  394, 1116,  374, 2092,  392, 1116,  374, 2066,  418, 1116,  374, 2042,  440, 2066,  420, 1116,  374, 1116,  374, 2092,  392, 2044,  440, 1116,  374, 2092,  392, 1116,  374, 2092,  392, 1116,  374, 2092,  392, 1116,  374, 1116,  374, 2066,  418, 2084,  400, 1116,  374};  // NIKAI AA6559
+//uint64_t data = 0xAA6559;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Down",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAA7558 (24 Bits)
+uint16_t rawData[51] = {3896, 4080,  392, 1116,  374, 2066,  418, 1116,  374, 2092,  392, 1116,  374, 2090,  392, 1116,  374, 2066,  418, 2066,  418, 1116,  376, 1116,  374, 1116,  372, 2066,  418, 1116,  374, 2066,  418, 1116,  374, 2092,  392, 1116,  374, 2092,  394, 1114,  374, 1116,  374, 2092,  392, 2066,  418, 2066,  418};  // NIKAI AA7558
+//uint64_t data = 0xAA7558;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Left",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAA9556 (24 Bits)
+uint16_t rawData[103] = {3898, 4054,  418, 1092,  398, 2064,  418, 1086,  406, 2064,  418, 1106,  384, 2066,  418, 1112,  378, 2064,  418, 1102,  388, 2066,  420, 2064,  418, 1094,  396, 2042,  442, 1114,  374, 2066,  420, 1070,  418, 2064,  420, 1116,  374, 2066,  418, 1112,  378, 2066,  418, 1114,  376, 1114,  376, 2064,  418, 8048,  3898, 4040,  432, 1114,  376, 2066,  418, 1092,  398, 2066,  418, 1098,  392, 2064,  420, 1070,  420, 2064,  420, 1094,  396, 2064,  420, 2064,  420, 1092,  400, 2042,  442, 1092,  398, 2066,  418, 1092,  398, 2064,  420, 1092,  398, 2042,  442, 1092,  398, 2066,  418, 1092,  398, 1092,  396, 2066,  420};  // NIKAI AA9556
+//uint64_t data = 0xAA9556;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Right",5) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAA8557 (24 Bits)
+uint16_t rawData[51] = {3896, 4052,  420, 1072,  420, 2064,  418, 1070,  420, 2042,  442, 1092,  398, 2066,  418, 1070,  420, 2042,  442, 1092,  398, 2066,  418, 2064,  420, 2044,  440, 2066,  418, 1082,  408, 2058,  426, 1092,  398, 2042,  442, 1070,  420, 2042,  442, 1092,  398, 2066,  418, 1092,  398, 1092,  398, 1092,  398};  // NIKAI AA8557
+//uint64_t data = 0xAA8557;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Stop",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAE051F (24 Bits)
+uint16_t rawData[155] = {3898, 4054,  420, 1114,  376, 2042,  442, 1104,  386, 2066,  418, 1114,  376, 1114,  376, 1114,  376, 2104,  380, 2064,  420, 2066,  420, 2062,  420, 2066,  418, 2066,  418, 1114,  374, 2066,  420, 1114,  376, 2066,  418, 2066,  418, 2066,  418, 1114,  376, 1114,  374, 1116,  376, 1114,  376, 1094,  396, 8050,  3896, 4054,  418, 1114,  376, 2042,  442, 1114,  376, 2064,  420, 1114,  376, 1112,  378, 1092,  398, 2066,  418, 2066,  418, 2044,  440, 2066,  418, 2066,  418, 2066,  418, 1116,  374, 2066,  418, 1092,  398, 2066,  418, 2066,  418, 2066,  418, 1114,  376, 1114,  376, 1114,  374, 1116,  376, 1092,  396, 8050,  3896, 4054,  418, 1114,  376, 2064,  418, 1072,  420, 2064,  418, 1094,  398, 1116,  374, 1116,  374, 2066,  420, 2064,  418, 2066,  418, 2066,  418, 2064,  420, 2064,  420, 1092,  396, 2066,  420, 1092,  396, 2066,  418, 2064,  418, 2064,  420, 1094,  396, 1072,  418, 1072,  418, 1072,  418, 1094,  396};  // NIKAI AE051F
+//uint64_t data = 0xAE051F;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Play",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAEA515 (24 Bits)
+uint16_t rawData[103] = {3898, 4054,  418, 1072,  418, 2042,  442, 1094,  396, 2042,  442, 1092,  398, 1070,  420, 1070,  420, 2066,  420, 1110,  380, 2066,  420, 1114,  376, 2066,  418, 2066,  416, 1072,  420, 2064,  420, 1070,  420, 2042,  442, 2042,  442, 2042,  442, 1070,  420, 2064,  420, 1072,  420, 2042,  440, 1094,  398, 8048,  3898, 4052,  420, 1092,  398, 2064,  420, 1092,  398, 2064,  418, 1114,  376, 1092,  398, 1092,  398, 2064,  420, 1106,  384, 2066,  418, 1094,  396, 2042,  442, 2066,  418, 1094,  396, 2042,  442, 1092,  398, 2066,  418, 2066,  418, 2066,  418, 1092,  398, 2042,  442, 1092,  398, 2066,  418, 1072,  418};  // NIKAI AEA515
+//uint64_t data = 0xAEA515;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Select",6) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xA0B5F4 (24 Bits)
+uint16_t rawData[51] = {3872, 4054,  418, 1116,  374, 2066,  418, 1116,  374, 2068,  416, 2066,  418, 2090,  394, 2078,  406, 2066,  418, 1116,  374, 2066,  418, 1116,  374, 1116,  374, 2092,  392, 1116,  374, 2066,  418, 1116,  374, 1116,  374, 1116,  374, 1116,  374, 1116,  374, 2044,  440, 1116,  374, 2066,  418, 2088,  396};  // NIKAI A0B5F4
+//uint64_t data = 0xA0B5F4;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Menu",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAF7508 (24 Bits)
+uint16_t rawData[103] = {3896, 4054,  418, 1116,  374, 2066,  418, 1116,  374, 2076,  408, 1114,  376, 1114,  376, 1116,  374, 1116,  374, 2112,  374, 1114,  376, 1116,  374, 1116,  374, 2066,  418, 1116,  374, 2092,  394, 1116,  374, 2066,  418, 2066,  418, 2090,  394, 2090,  392, 1116,  374, 2066,  418, 2064,  420, 2066,  418, 8094,  3852, 4056,  418, 1114,  374, 2068,  416, 1116,  374, 2066,  420, 1114,  374, 1116,  374, 1116,  374, 1114,  376, 2066,  418, 1116,  374, 1116,  374, 1116,  374, 2090,  394, 1116,  374, 2064,  418, 1116,  374, 2064,  418, 2064,  420, 2064,  420, 2066,  418, 1116,  374, 2066,  418, 2066,  418, 2066,  418};  // NIKAI AF7508
+//uint64_t data = 0xAF7508;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else if (strncmp(ptr,"Exit",4) == 0) {
+//Protocol  : NIKAI
+//Code      : 0xAD8527 (24 Bits)
+uint16_t rawData[103] = {3920, 4054,  418, 1072,  420, 2042,  442, 1078,  412, 2042,  442, 1092,  398, 1070,  420, 2066,  418, 1070,  420, 1070,  418, 2042,  442, 2064,  420, 2064,  420, 2064,  420, 1092,  398, 2066,  418, 1092,  398, 2066,  418, 2044,  442, 1092,  398, 2044,  440, 2042,  442, 1090,  400, 1092,  398, 1092,  398, 8028,  3920, 4054,  418, 1094,  396, 2064,  420, 1048,  440, 2066,  418, 1072,  418, 1070,  420, 2064,  420, 1072,  416, 1050,  442, 2042,  440, 2066,  418, 2042,  442, 2064,  418, 1072,  418, 2066,  418, 1048,  442, 2042,  442, 2066,  418, 1072,  418, 2066,  418, 2044,  440, 1072,  418, 1072,  418, 1072,  418};  // NIKAI AD8527
+//uint64_t data = 0xAD8527;
+            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_56);
+//            irsend.sendNikai(data);
+//            irsend.send(NIKAI, data, 24, 1);
+        }
+        else {
+          Serial.printf("Unknown remote command\n");
         }
       }
       else if (num == codesClient) {
@@ -932,9 +1088,45 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t lenght
             code[i].type = strToDecodeType(type);
             code[i].data = getUInt64fromHex(data+2); 
             code[i].nbits = strtoul(nbits, NULL, 10); 
-            Serial.printf("got code: %s\n", printCode(code[i]));
+            Serial.printf("got code: ");
+            printCode(code[i]);
           }
           saveCodeConfig();
+        }
+        else if (strncmp(ptr,"sendCode",8) == 0) {
+          Serial.printf("send code\n");
+          codeType acode;
+          char type[20];
+          char data[20];
+          char nbits[20];
+          target = "code";
+          ptr = strstr((char *)payload, target) + strlen(target)+4;
+          char *end = strchr(ptr, '\"');
+          memcpy(acode.name, ptr, (end-ptr));
+          acode.name[end-ptr] = '\0';
+          ptr = end+3;
+          end = strchr(ptr, '\"');
+          memcpy(type, ptr, (end-ptr));
+          type[end-ptr] = '\0';
+          ptr = end+3;
+          end = strchr(ptr, '\"');
+          memcpy(data, ptr, (end-ptr));
+          data[end-ptr] = '\0';
+          ptr = end+3;
+          end = strchr(ptr, '\"');
+          memcpy(nbits, ptr, (end-ptr));
+          nbits[end-ptr] = '\0';
+          Serial.printf("'%s' '%s' '%s' '%s'\n", acode.name, type, data, nbits);
+          acode.type = strToDecodeType(type);
+          acode.data = getUInt64fromHex(data+2); 
+          acode.nbits = strtoul(nbits, NULL, 10); 
+
+          // ignore receiving this command we're sending out
+          irrecv.disableIRIn();  // Stop the receiver
+          Serial.printf("ir: ");
+          printCode(acode);
+          irsend.send(acode.type, acode.data, acode.nbits, 1);   // send the code out
+          irrecv.enableIRIn();  // Start the receiver
         }
       }
       break;
@@ -1182,28 +1374,51 @@ void reconnect() {
 
 
 void callback(char* topic, byte* payload, unsigned int length) {
-  // only topic we get is <host_name>/command
-  // get ir code, and send it out
-  char name[12];
-  memcpy(name, payload, length);
-  name[length] = '\0';
-  Serial.printf("Message arrived [%s] %s\n", topic, name);
+  // only topic we get is <host_name>/command or nightlight
   
-  int index = getCodeIndex(name);
-  if (index == -1) {
-    Serial.printf("Unknown code\n");
-    return;  
-  }
-  
-  // ignore receiving this command we're sending out
-  irrecv.disableIRIn();  // Stop the receiver
-  codeType c = code[index];
-  Serial.printf("ir: %s\n", printCode(c));
-  irsend.send(c.type, c.data, c.nbits, 1);   // send the code out
-  irrecv.enableIRIn();  // Start the receiver
+  char value[12];
+  memcpy(value, payload, length);
+  value[length] = '\0';
+  Serial.printf("Message arrived [%s] %s\n", topic, value);
 
-  // also send to main display
-  if (webClient != -1) {
-    sendWeb("code", name);
+  if (strcmp(topic, "command") == 0) {
+    // get ir code, and send it out
+    int index = getCodeIndex(value);
+    if (index == -1) {
+      Serial.printf("Unknown code\n");
+      return;  
+    }
+    
+    // ignore receiving this command we're sending out
+    irrecv.disableIRIn();  // Stop the receiver
+    codeType c = code[index];
+    Serial.printf("ir: ");
+    printCode(c);
+    irsend.send(c.type, c.data, c.nbits, 1);   // send the code out
+    irrecv.enableIRIn();  // Start the receiver
+  
+    // also send to main display
+    if (webClient != -1) {
+      sendWeb("code", value);
+    }
+  }
+  else if (strcmp(topic, "nightlight") == 0) {
+    if (strcmp(value, "off") == 0) {
+      nightlightState = LOW;
+    }
+    else if (strcmp(value, "on") == 0) {
+      nightlightState = HIGH;
+    }
+    else {
+      Serial.printf("Unknown command\n");
+      return;        
+    }
+    
+    digitalWrite(NIGHTLIGHT, nightlightState);
+    // also send to main display
+    printNightlight();
+  }
+  else {
+    Serial.printf("Unknown topic\n");
   }
 }
