@@ -7,6 +7,9 @@
 #span {
   width: 30px;
 }
+#ssid {
+  width: 90px;
+}
 #host_name {
   width: 90px;
 }
@@ -15,6 +18,12 @@
 }
 #mqtt_ip_port {
   width: 30px;
+}
+#light_on {
+  width: 40px;
+}
+#light_off {
+  width: 40px;
 }
 </style>
 <script src='https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js'></script>
@@ -32,9 +41,14 @@ function message(msg){
     
   $('#date').html(obj.date);
   $('#time').html(obj.time);
+  $('#ssid').html(obj.ssid);
   $('#host_name').val(obj.host_name);
+  $('#use_mqtt').prop('checked', obj.use_mqtt=='1');
   $('#mqtt_ip_addr').val(obj.mqtt_ip_addr);
   $('#mqtt_ip_port').val(obj.mqtt_ip_port);
+  $('#use_light').prop('checked', obj.use_light=='1');
+  $('#light_on').val(obj.light_on);
+  $('#light_off').val(obj.light_off);
 }
 
 function initGui() {
@@ -63,17 +77,52 @@ function initGui() {
     socket.send(JSON.stringify(json)); 
   });
 
+  $('#wifi').button().click(function(event) {
+    var json = {
+      command: 'wifi'
+    };
+    socket.send(JSON.stringify(json));
+	alert('Join the IR access point to configure the wifi');
+  });
+
   $('#cancel').button().click(function(event) {
     close();
   });
 }
 
 function doSave() {
+  var light_on = $('#light_on').val().split(':');
+  var light_on_hour, light_on_minute;
+  if (light_on.length === 2) {
+    light_on_hour = light_on[0];
+	light_on_minute = light_on[1];
+  }
+  else {
+    light_on_hour = 255;
+	light_on_minute = 255;
+  }
+  var light_off = $('#light_off').val().split(':');
+  var light_off_hour, light_off_minute;
+  if (light_off.length === 2) {
+    light_off_hour = light_off[0];
+	light_off_minute = light_off[1];
+  }
+  else {
+    light_off_hour = 255;
+	light_off_minute = 255;
+  }
+
   var json = {
     command: 'save',
 	host_name: $('#host_name').val(),
+    use_mqtt: $('#use_mqtt').is(':checked') ? '1' : '0',
 	mqtt_ip_addr: $('#mqtt_ip_addr').val(),
-	mqtt_ip_port: $('#mqtt_ip_port').val()
+	mqtt_ip_port: $('#mqtt_ip_port').val(),
+    use_light: $('#use_light').is(':checked') ? '1' : '0',
+	light_on_hour: light_on_hour.toString(),
+	light_on_minute: light_on_minute.toString(),
+	light_off_hour: light_off_hour.toString(),
+	light_off_minute: light_off_minute.toString()
   };
   console.log(JSON.stringify(json));
   socket.send(JSON.stringify(json)); 
@@ -88,13 +137,18 @@ function close() {
 <div id='message' style='zoom:200%;'></div>
 <div id='controls'>
   Compiled:<br><label id='date'></label>,<label id='time'></label><br>
+  SSID:<label id='ssid'></label><br>
   Host Name:<input id='host_name'><br>
+  <input type='checkbox' id='use_mqtt'>Use MQTT<br>
   MQTT IP Address:<input id='mqtt_ip_addr'><br>
   MQTT Port:<input id='mqtt_ip_port'><br>
-  <br>
+  <input type='checkbox' id='use_light'>Nightlight: (HH:MM)<br>
+  On:<input id='light_on'><br>
+  Off:<input id='light_off'><br><br>
   <button id='spiffs'>SPIFFS</button>
   <button id='ota'>OTA Update</button><br><br>
-  <button id='reboot'>Reboot</button><br><br>
+  <button id='reboot'>Reboot</button>
+  <button id='wifi'>Reset Wifi</button><br><br>
   <button id='save'>Save</button>
   <button id='cancel'>Cancel</button>
 </div>

@@ -1,11 +1,17 @@
 /*
  * module is a WeMos D1 R1
  * flash size set to 4M (1M SPIFFS) or 4MB (FS:1MB OTA:~1019KB) (latest esp board sw uses this)
+ * OR
+ * module is a esp12e
+ * flash size set to 4M (1M SPIFFS) or 4MB (FS:1MB OTA:~1019KB) (latest esp board sw uses this)
+ * 
  */
 
 /*
  * todo:
  * - fix codes screen to capture type, data, and # bits
+ * still not working correctlt with vizio and kodi
+ * - make temp sensor external...right now its picking up too much cpu heat
  * 
  * notes:
  * - disable windows antivirus running when this is compiling...its killing the machine
@@ -88,6 +94,23 @@ Timezone myTZ(myDST, mySTD);
 #include <IRutils.h>
 
 
+WiFiManager wifiManager;
+String ssid;
+
+// add defines if we're not using a wemos board
+#ifndef D5
+#define D5 14
+#define D6 12
+#define D7 13
+#endif
+
+
+// 38kHz carrier frequency (soundbar, tv)
+#define KHZ_38 38
+
+// 56kHz carrier frequency for the xbox usb dongle?  (not verified)
+#define KHZ_56 56 
+
 IRsend irsend(D7);
 IRrecv irrecv(D5);
 decode_results results;
@@ -121,7 +144,6 @@ ESP8266WebServer server(80);
 File fsUploadFile;
 bool isUploading;
 bool isSetup = false;
-
 WebSocketsServer webSocket = WebSocketsServer(81);
 int webClient = -1;
 int setupClient = -1;
@@ -164,6 +186,12 @@ typedef struct {
   char host_name[17];
   char mqtt_ip_addr[17];
   int mqtt_ip_port;
+  byte use_mqtt;
+  byte use_light;
+  byte light_on_hour;
+  byte light_on_minute;
+  byte light_off_hour;
+  byte light_off_minute;
 } configType;
 
 configType config;
@@ -230,7 +258,7 @@ void setup() {
 }
 
 
-#define MAGIC_NUM   0xAF
+#define MAGIC_NUM   0xAD
 
 #define MAGIC_NUM_ADDRESS      0
 #define CONFIG_ADDRESS         1
@@ -255,6 +283,12 @@ void loadConfig(void) {
     set(config.host_name, HOST_NAME);
     set(config.mqtt_ip_addr, MQTT_IP_ADDR);
     config.mqtt_ip_port = MQTT_IP_PORT;
+    config.use_mqtt = 0;
+    config.use_light = 0;
+    config.light_on_hour = 255;
+    config.light_on_minute = 255;
+    config.light_off_hour = 255;
+    config.light_off_minute = 255;
 
     saveConfig();
   }
@@ -266,8 +300,12 @@ void loadConfig(void) {
   }
 
   Serial.printf("host_name %s\n", config.host_name);
+  Serial.printf("use_mqtt %d\n", config.use_mqtt);
   Serial.printf("mqqt_ip_addr %s\n", config.mqtt_ip_addr);
   Serial.printf("mqtt_ip_port %d\n", config.mqtt_ip_port);
+  Serial.printf("use_light %d\n", config.use_light);
+  Serial.printf("light_on %d:%d\n", config.light_on_hour, config.light_on_minute);
+  Serial.printf("light_off %d:%d\n", config.light_off_hour, config.light_off_minute);
 }
 
 
@@ -436,12 +474,15 @@ void loop() {
   MDNS.update();
  
   // mqtt
-  if (!client.connected()) {
-    reconnect();
+  if (config.use_mqtt) {
+    if (!client.connected()) {
+      reconnect();
+    }
+    client.loop();
   }
-  client.loop();
 
-  checkTemperature();
+// cpd...why call this?
+//  checkTemperature();
 
   checkIRreceiver();
 
@@ -501,12 +542,47 @@ void printIRreceiver(void) {
       if (webClient != -1) {
         sendWeb("code", c.name);
       }
+
+      // cpd...hack for now, do the soundbar trick when the tv is turned on
+      // on/off are the same, so we're really doing it for both
+      if (strcmp("tv-on", c.name) == 0) {
+        Serial.printf("delay 30 seconds\n");
+        // wait 30 seconds for the tv to finish starting up
+        sendWeb("code", "delay 30 seconds");
+        delay(30 * 1000);
+        // turn off the soundbar
+        Serial.printf("soundbar off\n");
+        sendWeb("code", "soundbar off");
+        soundbarPower();
+        Serial.printf("delay 8 seconds\n");
+        // wait a bit before turning it back on
+        sendWeb("code", "delay 8 seconds");
+        delay(8 * 1000);
+        // turn off the soundbar
+        Serial.printf("soundbar on\n");
+        sendWeb("code", "soundbar on");
+        soundbarPower();
+      }
     }
     else {
       Serial.printf("no match\n");
     }
   }
 }
+
+
+void soundbarPower(void) {
+//Protocol  : SAMSUNG36
+//Code      : 0xCF000EF1 (36 Bits)
+uint16_t rawData[77] = {4490, 4512,  504, 522,  480, 524,  480, 524,  480, 524,  480, 1528,  480, 1526,  480, 526,  480, 524,  480, 1526,  482, 1526,  480, 1528,  480, 1526,  480, 524,  480, 524,  480, 524,  480, 524,  480, 4496,  504, 524,  480, 524,  480, 524,  480, 524,  480, 524,  480, 524,  478, 524,  480, 524,  480, 1526,  480, 1526,  480, 1528,  478, 524,  480, 1528,  480, 1526,  480, 1526,  480, 1528,  480, 524,  480, 524,  480, 524,  480, 1526,  480};  // SAMSUNG36 CF000EF1
+//uint32_t address = 0xCF0;
+//uint32_t command = 0xEF1;
+//uint64_t data = 0xCF000EF1;
+  irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
+//            irsend.sendSamsung36(data);
+//            irsend.send(SAMSUNG36, data, 32, 1);
+}
+
 
 // dupe of resultToHexidecimal, but without the result struct
 String resultToHexidecimal2(uint64_t data) {
@@ -588,6 +664,33 @@ void checkTime(unsigned long time) {
  
   lastMinutes = minutes;
   printTime();
+
+  checkNightlight();
+}
+
+
+void checkNightlight(void) {
+  // called every minute
+  if (!config.use_light)
+    return;
+
+  int hours = hour();
+  if (hours == config.light_on_hour && lastMinutes == config.light_on_minute) {
+    // time to turn the light on
+    nightlightState = HIGH;
+    
+    digitalWrite(NIGHTLIGHT, nightlightState);
+    // also send to main display
+    printNightlight();
+  }
+  else if (hours == config.light_off_hour && lastMinutes == config.light_off_minute) {
+    // time to turn the light off
+    nightlightState = LOW;
+
+    digitalWrite(NIGHTLIGHT, nightlightState);
+    // also send to main display
+    printNightlight();
+  }
 }
 
 
@@ -626,6 +729,14 @@ void printTime() {
   char msg[6+1+4];
   sprintf(msg, "%s %s", buf, weekdayNames[dayOfWeek]); 
   sendWeb("time", msg);
+}
+
+
+void printName() {
+  if (webClient == -1)
+    return;
+    
+  sendWeb("name", config.host_name);
 }
 
 
@@ -685,13 +796,12 @@ void checkTemperature(void) {
 bool setupWifi(void) {
   WiFi.hostname(config.host_name);
   
-  WiFiManager wifiManager;
 //  wifiManager.setDebugOutput(false);
   
   //reset settings - for testing
   //wifiManager.resetSettings();
 
-  String ssid = WiFi.SSID();
+  ssid = WiFi.SSID();
   if (ssid.length() > 0) {
     Serial.print(F("Connecting to "));
     Serial.println(ssid);
@@ -778,13 +888,6 @@ void setupTime(void) {
 }
 
 
-// 38kHz carrier frequency (soundbar, tv)
-#define KHZ_38 38
-
-// 56kHz carrier frequency for the xbox usb dongle?  (not verified)
-#define KHZ_56 56 
-
-
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
@@ -808,6 +911,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         webClient = num;
       
         // send the current state
+        printName();
         printCurrentTemperature();
         printTime();
         printNightlight();
@@ -820,8 +924,19 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(json+strlen(json), "\"date\":\"%s\"", __DATE__);
         sprintf(json+strlen(json), ",\"time\":\"%s\"", __TIME__);
         sprintf(json+strlen(json), ",\"host_name\":\"%s\"", config.host_name);
+        sprintf(json+strlen(json), ",\"use_mqtt\":\"%d\"", config.use_mqtt);
         sprintf(json+strlen(json), ",\"mqtt_ip_addr\":\"%s\"", config.mqtt_ip_addr);
         sprintf(json+strlen(json), ",\"mqtt_ip_port\":\"%d\"", config.mqtt_ip_port);
+        sprintf(json+strlen(json), ",\"use_light\":\"%d\"", config.use_light);
+        if (config.light_on_hour != 255 && config.light_on_minute != 255) 
+          sprintf(json+strlen(json), ",\"light_on\":\"%d:%d\"", config.light_on_hour, config.light_on_minute);
+        else
+          sprintf(json+strlen(json), ",\"light_on\":\"\"");
+        if (config.light_off_hour != 255 && config.light_off_minute != 255) 
+          sprintf(json+strlen(json), ",\"light_off\":\"%d:%d\"", config.light_off_hour, config.light_off_minute);
+        else
+          sprintf(json+strlen(json), ",\"light_off\":\"\"");
+        sprintf(json+strlen(json), ",\"ssid\":\"%s\"", ssid.c_str());
         strcpy(json+strlen(json), "}");
 //        Serial.printf("len %d\n", strlen(json));
         webSocket.sendTXT(setupClient, json, strlen(json));
@@ -882,6 +997,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         if (strncmp(ptr,"reboot",6) == 0) {
           ESP.restart();
         }
+        else if (strncmp(ptr,"wifi",4) == 0) {
+          wifiManager.resetSettings();
+          ESP.restart();
+        }
         else if (strncmp(ptr,"save",4) == 0) {
           Serial.printf("save setup\n");
           
@@ -890,6 +1009,10 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           char *end = strchr(ptr, '\"');
           memcpy(config.host_name, ptr, (end-ptr));
           config.host_name[end-ptr] = '\0';
+
+          target = "use_mqtt";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.use_mqtt = strtol(ptr, &ptr, 10);
 
           target = "mqtt_ip_addr";
           ptr = strstr((char *)payload, target) + strlen(target)+3;
@@ -901,9 +1024,33 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           ptr = strstr((char *)payload, target) + strlen(target)+3;
           config.mqtt_ip_port = strtol(ptr, &ptr, 10);
 
+          target = "use_light";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.use_light = strtol(ptr, &ptr, 10);
+
+          target = "light_on_hour";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.light_on_hour = strtol(ptr, &ptr, 10);
+
+          target = "light_on_minute";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.light_on_minute = strtol(ptr, &ptr, 10);
+
+          target = "light_off_hour";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.light_off_hour = strtol(ptr, &ptr, 10);
+
+          target = "light_off_minute";
+          ptr = strstr((char *)payload, target) + strlen(target)+3;
+          config.light_off_minute = strtol(ptr, &ptr, 10);
+
           Serial.printf("host_name %s\n", config.host_name);
+          Serial.printf("use_mqtt %d\n", config.use_mqtt);
           Serial.printf("mqtt_ip_addr %s\n", config.mqtt_ip_addr);
           Serial.printf("mqtt_ip_port %d\n", config.mqtt_ip_port);
+          Serial.printf("use_light %d\n", config.use_light);
+          Serial.printf("light_on %d:%d\n", config.light_on_hour, config.light_on_minute);
+          Serial.printf("light_off %d:%d\n", config.light_off_hour, config.light_off_minute);
           saveConfig();
         }
       }
@@ -956,15 +1103,7 @@ uint16_t rawData[67] = {8952, 4466,  550, 594,  524, 592,  524, 1682,  552, 592,
 //            irsend.send(NEC, data, 32, 1);
         }
         else if (strncmp(ptr,"SB-Power",8) == 0) {
-//Protocol  : SAMSUNG36
-//Code      : 0xCF000EF1 (36 Bits)
-uint16_t rawData[77] = {4490, 4512,  504, 522,  480, 524,  480, 524,  480, 524,  480, 1528,  480, 1526,  480, 526,  480, 524,  480, 1526,  482, 1526,  480, 1528,  480, 1526,  480, 524,  480, 524,  480, 524,  480, 524,  480, 4496,  504, 524,  480, 524,  480, 524,  480, 524,  480, 524,  480, 524,  478, 524,  480, 524,  480, 1526,  480, 1526,  480, 1528,  478, 524,  480, 1528,  480, 1526,  480, 1526,  480, 1528,  480, 524,  480, 524,  480, 524,  480, 1526,  480};  // SAMSUNG36 CF000EF1
-//uint32_t address = 0xCF0;
-//uint32_t command = 0xEF1;
-//uint64_t data = 0xCF000EF1;
-            irsend.sendRaw(rawData, sizeof(rawData) / sizeof(rawData[0]), KHZ_38);
-//            irsend.sendSamsung36(data);
-//            irsend.send(SAMSUNG36, data, 32, 1);
+          soundbarPower();
         }
         else if (strncmp(ptr,"Up",2) == 0) {
 //Protocol  : NIKAI
