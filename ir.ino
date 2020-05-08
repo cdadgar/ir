@@ -142,7 +142,6 @@ ESP8266HTTPUpdateServer httpUpdater;
 
 ESP8266WebServer server(80);
 File fsUploadFile;
-bool isUploading;
 bool isSetup = false;
 WebSocketsServer webSocket = WebSocketsServer(81);
 int webClient = -1;
@@ -245,8 +244,6 @@ void setup() {
   irsend.begin();
   irrecv.enableIRIn();  // Start the receiver
 
-  isUploading = false;
-
   lastMinutes = 0;
 
   pinMode(PIR, INPUT);
@@ -309,6 +306,15 @@ void loadConfig(void) {
 }
 
 
+//void printCode(codeType c) {
+//  Serial.print(typeToString(c.type, false));
+//  Serial.print(" ");
+//  Serial.print(resultToHexidecimal2(c.data));
+//  Serial.print(" ");
+//  Serial.println(uint64ToString(c.nbits));
+//}
+
+
 void loadCodeConfig(void) {
   if (isMemoryReset) {
     // nothing saved in eeprom, use defaults
@@ -330,7 +336,7 @@ void loadCodeConfig(void) {
   }
   for (int i=0; i < numCodes; ++i) {
     Serial.printf("code %d: ", (i+1));
-    printCode(code[i]);
+//    printCode(code[i]);
   }
 }
 
@@ -456,11 +462,6 @@ void setupMqtt() {
 
 
 void loop() {
-  if (isUploading) {
-    server.handleClient();
-    return;
-  }
-  
   if (!isSetup)
     return;
 
@@ -497,15 +498,6 @@ void checkIRreceiver(void) {
     printIRreceiver();
     irrecv.resume();  // Receive the next value
   }  
-}
-
-
-void printCode(codeType c) {
-  Serial.print(typeToString(c.type, false));
-  Serial.print(" ");
-  Serial.print(resultToHexidecimal2(c.data));
-  Serial.print(" ");
-  Serial.println(uint64ToString(c.nbits));
 }
 
 
@@ -596,7 +588,7 @@ int getCodeFromResult(void) {
   for (int i=0; i < numCodes; ++i) {
     codeType c = code[i];
     Serial.printf("comparing %d: ", i);
-    printCode(c); 
+//    printCode(c); 
     if (c.type == results.decode_type && c.data == results.value) {
       Serial.printf("found match with %s\n", c.name);
       return i;
@@ -704,6 +696,7 @@ void printNightlight() {
 
 const char *weekdayNames[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
 
+
 void printTime() {
   if (webClient == -1)
     return;
@@ -749,6 +742,7 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   Serial.println(WiFi.softAPIP());
 }
 
+
 bool setupTemperature(void) {
   sensors.begin();
   if (sensors.getDeviceCount() != 1) {
@@ -778,6 +772,7 @@ void checkTemperature(unsigned long time) {
     lastTempRequest = millis(); 
   }
 }
+
 
 void checkTemperature(void) {
   float tempF = sensors.getTempF(thermometer);
@@ -819,6 +814,7 @@ bool setupWifi(void) {
 
   return true;
 }
+
 
 void setupTime(void) {
   Serial.println(F("Getting time"));
@@ -1228,7 +1224,7 @@ uint16_t rawData[103] = {3920, 4054,  418, 1072,  420, 2042,  442, 1078,  412, 2
             code[i].data = getUInt64fromHex(data+2); 
             code[i].nbits = strtoul(nbits, NULL, 10); 
             Serial.printf("got code: ");
-            printCode(code[i]);
+//            printCode(code[i]);
           }
           saveCodeConfig();
         }
@@ -1263,7 +1259,7 @@ uint16_t rawData[103] = {3920, 4054,  418, 1072,  420, 2042,  442, 1078,  412, 2
           // ignore receiving this command we're sending out
           irrecv.disableIRIn();  // Stop the receiver
           Serial.printf("ir: ");
-          printCode(acode);
+//          printCode(acode);
           irsend.send(acode.type, acode.data, acode.nbits, 1);   // send the code out
           irrecv.enableIRIn();  // Start the receiver
         }
@@ -1292,6 +1288,7 @@ uint64_t getUInt64fromHex(char const *str) {
 void sendWeb(const char *command, const char *value) {
   send(webClient, command, value);
 }
+
 
 void send(int client, const char *command, const char *value) {
   char json[128];
@@ -1328,6 +1325,7 @@ String formatBytes(size_t bytes){
   }
 }
 
+
 String getContentType(String filename){
   if(server.hasArg("download")) return "application/octet-stream";
   else if(filename.endsWith(".htm")) return "text/html";
@@ -1345,6 +1343,7 @@ String getContentType(String filename){
   return "text/plain";
 }
 
+
 bool handleFileRead(String path){
   Serial.println("handleFileRead: " + path);
   if(path.endsWith("/")) path += "index.htm";
@@ -1360,6 +1359,7 @@ bool handleFileRead(String path){
   }
   return false;
 }
+
 
 void handleFileUpload_edit(){
   HTTPUpload& upload = server.upload();
@@ -1380,6 +1380,7 @@ void handleFileUpload_edit(){
   }
 }
 
+
 void handleFileDelete(){
   if(server.args() == 0) return server.send(500, "text/plain", "BAD ARGS");
   String path = server.arg(0);
@@ -1392,6 +1393,7 @@ void handleFileDelete(){
   server.send(200, "text/plain", "");
   path = String();
 }
+
 
 void handleFileCreate(){
   if(server.args() == 0)
@@ -1410,6 +1412,7 @@ void handleFileCreate(){
   server.send(200, "text/plain", "");
   path = String();
 }
+
 
 void handleFileList() {
   if(!server.hasArg("dir")) {server.send(500, "text/plain", "BAD ARGS"); return;}
@@ -1436,6 +1439,7 @@ void handleFileList() {
   server.send(200, "text/json", output);
 }
 
+
 void countRootFiles(void) {
   int num = 0;
   size_t totalSize = 0;
@@ -1449,6 +1453,7 @@ void countRootFiles(void) {
   }
   Serial.printf("FS File: serving %d files, size: %s from /\n", num, formatBytes(totalSize).c_str());
 }
+
 
 void setupWebServer(void) {
   SPIFFS.begin();
@@ -1532,7 +1537,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     irrecv.disableIRIn();  // Stop the receiver
     codeType c = code[index];
     Serial.printf("ir: ");
-    printCode(c);
+//    printCode(c);
     irsend.send(c.type, c.data, c.nbits, 1);   // send the code out
     irrecv.enableIRIn();  // Start the receiver
   
