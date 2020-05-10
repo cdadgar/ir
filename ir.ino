@@ -525,11 +525,13 @@ void printIRreceiver(void) {
     if (index != -1) {
       codeType c = code[index];
       // mqtt
-      Serial.printf("publish to mqtt: %s\n", c.name);
-      char topic[20];
-      sprintf(topic, "%s/ir", config.host_name);
-      client.publish(topic, c.name);
-
+      if (config.use_mqtt) {
+        Serial.printf("publish to mqtt: %s\n", c.name);
+        char topic[20];
+        sprintf(topic, "%s/ir", config.host_name);
+        client.publish(topic, c.name);
+      }
+      
       // also send to main display
       if (webClient != -1) {
         sendWeb("code", c.name);
@@ -634,9 +636,11 @@ void movement(bool isMoved) {
   }
 
   // mqtt
-  char topic[20];
-  sprintf(topic, "%s/movement", config.host_name);
-  client.publish(topic, isMoved ? "started" : "stopped");
+  if (config.use_mqtt) {
+    char topic[20];
+    sprintf(topic, "%s/movement", config.host_name);
+    client.publish(topic, isMoved ? "started" : "stopped");
+  }
 }
 
 
@@ -982,9 +986,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           Serial.printf("nightlight %d\n", nightlightState);
 
           // mqtt
-          char topic[30];
-          sprintf(topic, "%s/nightlight", config.host_name);
-          client.publish(topic, ((nightlightState == LOW) ? "off" : "on"));
+          if (config.use_mqtt) {
+            char topic[30];
+            sprintf(topic, "%s/nightlight", config.host_name);
+            client.publish(topic, ((nightlightState == LOW) ? "off" : "on"));
+          }
         }
       }
       else if (num == setupClient) {
@@ -1306,9 +1312,11 @@ void printCurrentTemperature() {
   }
   
   // mqtt
-  char topic[20];
-  sprintf(topic, "%s/temperature", config.host_name);
-  client.publish(topic, buf);
+  if (config.use_mqtt) {
+    char topic[20];
+    sprintf(topic, "%s/temperature", config.host_name);
+    client.publish(topic, buf);
+  }
 }
 
 
@@ -1506,6 +1514,8 @@ void reconnect() {
       char topic[30];
       sprintf(topic, "%s/command", config.host_name);
       client.subscribe(topic);
+      sprintf(topic, "%s/nightlight", config.host_name);
+      client.subscribe(topic);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -1519,7 +1529,10 @@ void reconnect() {
 
 void callback(char* topic, byte* payload, unsigned int length) {
   // only topic we get is <host_name>/command or nightlight
-  
+
+  // strip off the hostname from the topic
+  topic += strlen(config.host_name) + 1;
+
   char value[12];
   memcpy(value, payload, length);
   value[length] = '\0';
