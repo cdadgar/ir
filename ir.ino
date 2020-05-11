@@ -10,8 +10,7 @@
 /*
  * todo:
  * - fix codes screen to capture type, data, and # bits
- * still not working correctlt with vizio and kodi
- * - make temp sensor external...right now its picking up too much cpu heat
+ * still not working correctly with vizio and kodi
  * 
  * notes:
  * - disable windows antivirus running when this is compiling...its killing the machine
@@ -481,9 +480,6 @@ void loop() {
     }
     client.loop();
   }
-
-// cpd...why call this?
-//  checkTemperature();
 
   checkIRreceiver();
 
