@@ -48,16 +48,16 @@ function message(msg){
   else if (obj.command == 'code') {
     // ignore repeat commands
     if (obj.value.type.endsWith('(Repeat)'))
-	  return;
+      return;
 
-	// populate the row values
+    // populate the row values
     var row = $(':focus').parent();
-	row.find('.protocolCol').val(obj.value.type);
-	row.find('.valueCol').val(obj.value.data);
-	row.find('.lengthCol').val(obj.value.nbits);
-	
-	// set focus back on the name field
-	row.find(".nameCol").focus();
+    row.find('.protocolCol').val(obj.value.type);
+    row.find('.valueCol').val(obj.value.data);
+    row.find('.lengthCol').val(obj.value.nbits);
+
+    // set focus back on the name field
+    row.find(".nameCol").focus();
   }
 }
 
@@ -69,42 +69,42 @@ function initGui(){
 
   $('#new').button().click(function(event) {
     var c = $('#codes');
-	var row = addRow(['','','','']);
-	c.append(row);
-	// set focus to the name field in the new row
-	var div = c.children(":last-child");
-	var name = div.children(":first-child");
-	name.focus();
+    var row = addRow(['','','','']);
+    c.append(row);
+    // set focus to the name field in the new row
+    var div = c.children(":last-child");
+    var name = div.children(":first-child");
+    name.focus();
   });
 
   $('#delete').button().click(function() {
     $( ".rowCb:checked" ).each(function(index, element) {
-	  $(element).parent().remove();
-	});
-	$('#all').prop('checked', false);
+      $(element).parent().remove();
+    });
+    $('#all').prop('checked', false);
   });
 
   $('#sort').button().click(function() {
     codes = getCodes();
-	console.log(codes);
-	codes.sort((a, b) => a[0].localeCompare(b[0]));
-	console.log('sorted',codes);
-	loadCodes();
+    console.log(codes);
+    codes.sort((a, b) => a[0].localeCompare(b[0]));
+    console.log('sorted',codes);
+    loadCodes();
   });
 
   $('#send').button().click(function() {
     var sel = $( ".rowCb:checked" );
-	if (sel.length !== 1) {
+    if (sel.length !== 1) {
       alert('Select one row');
-	  return;
-	}
-	
-	var code = [];
-	var row = $(sel[0]).parent();
-	row.children('.field').each(function(index, element) {
-	  code.push(element.value);
-	});
-	console.log(code);
+      return;
+    }
+
+    var code = [];
+    var row = $(sel[0]).parent();
+    row.children('.field').each(function(index, element) {
+      code.push(element.value);
+    });
+    console.log(code);
 
     var json = {
       command: 'sendCode',
@@ -132,13 +132,13 @@ function getCodes() {
   var c = [];
   $('.field').each(function(index, element) {
     if (index % 4 === 0)
-	  code = [element.value]
-	else {
-	  code.push(element.value);
+      code = [element.value]
+    else {
+      code.push(element.value);
       if (index % 4 === 3) { 
         c.push(code);
-	  }
-	}
+      }
+    }
   });
   return c;
 }
@@ -149,7 +149,7 @@ function doSave() {
 
   var json = {
     command: 'saveCodes',
-	num: codes.length,
+    num: codes.length,
     codes: codes
   };
   socket.send(JSON.stringify(json));
@@ -171,14 +171,14 @@ function loadCodes() {
     "<label align='center' class='protocolCol'>Protocol</label>" +
     "<label align='center' class='valueCol'>Value</label>" +
     "<label align='center' class='lengthCol'># Bits</label>" +
-	"<input type='checkbox' class='deleteCol' id='all' style='margin-left: 20px;'></input><br>";
+    "<input type='checkbox' class='deleteCol' id='all' style='margin-left: 20px;'></input><br>";
   for (var i=0; i < codes.length; ++i) {
     str += addRow(codes[i]);
   }
   c.append(str);
 
   $('#all').change(function() {
-	$('.rowCb').prop('checked', this.checked);
+    $('.rowCb').prop('checked', this.checked);
   });  
 }
 </script>

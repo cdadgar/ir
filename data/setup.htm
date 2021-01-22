@@ -82,7 +82,7 @@ function initGui() {
       command: 'wifi'
     };
     socket.send(JSON.stringify(json));
-	alert('Join the IR access point to configure the wifi');
+    alert('Join the IR access point to configure the wifi');
   });
 
   $('#cancel').button().click(function(event) {
@@ -95,34 +95,34 @@ function doSave() {
   var light_on_hour, light_on_minute;
   if (light_on.length === 2) {
     light_on_hour = light_on[0];
-	light_on_minute = light_on[1];
+    light_on_minute = light_on[1];
   }
   else {
     light_on_hour = 255;
-	light_on_minute = 255;
+    light_on_minute = 255;
   }
   var light_off = $('#light_off').val().split(':');
   var light_off_hour, light_off_minute;
   if (light_off.length === 2) {
     light_off_hour = light_off[0];
-	light_off_minute = light_off[1];
+    light_off_minute = light_off[1];
   }
   else {
     light_off_hour = 255;
-	light_off_minute = 255;
+    light_off_minute = 255;
   }
 
   var json = {
     command: 'save',
-	host_name: $('#host_name').val(),
+    host_name: $('#host_name').val(),
     use_mqtt: $('#use_mqtt').is(':checked') ? '1' : '0',
-	mqtt_ip_addr: $('#mqtt_ip_addr').val(),
-	mqtt_ip_port: $('#mqtt_ip_port').val(),
+    mqtt_ip_addr: $('#mqtt_ip_addr').val(),
+    mqtt_ip_port: $('#mqtt_ip_port').val(),
     use_light: $('#use_light').is(':checked') ? '1' : '0',
-	light_on_hour: light_on_hour.toString(),
-	light_on_minute: light_on_minute.toString(),
-	light_off_hour: light_off_hour.toString(),
-	light_off_minute: light_off_minute.toString()
+    light_on_hour: light_on_hour.toString(),
+    light_on_minute: light_on_minute.toString(),
+    light_off_hour: light_off_hour.toString(),
+    light_off_minute: light_off_minute.toString()
   };
   console.log(JSON.stringify(json));
   socket.send(JSON.stringify(json)); 

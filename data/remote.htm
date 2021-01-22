@@ -22,22 +22,22 @@ function initGui() {
     document.body.style.zoom = '305%';
   else
     document.body.style.zoom = '150%';
-	
+
   $('button').button().click(function(event) {
     var btn = $(this);
-	var command = btn.attr('command');
-	if (!command) {
+    var command = btn.attr('command');
+    if (!command) {
       command = btn.text();
-	}
-	if (command == 'Cancel') {
+    }
+    if (command == 'Cancel') {
       close();
-	  return;
-	}
+      return;
+    }
 
     var json = {
       command: command
     };
-	console.log('send', JSON.stringify(json));
+    console.log('send', JSON.stringify(json));
     socket.send(JSON.stringify(json));
   });
 }

@@ -14,7 +14,7 @@ function initWebsocket(page){
   else {
     if (host == 'localhost')
       host = '192.168.1.' + ADDR;
-	
+
     var port = location.port;
     if (port === '')
       port = 81;
