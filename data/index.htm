@@ -20,7 +20,7 @@ function message(msg){
   var extra = '';
   if (obj.value != '' && (obj.command == 'currentTemp')) {
     if (obj.value == '-999.0')
-	  return;
+      return;
     extra = '&deg;';
   }
   
@@ -31,13 +31,13 @@ function message(msg){
   
   if (obj.command === 'code') {
     // remove the code a few seconds later
-	if (timer) {
-	  clearTimeout(timer);
-	}
-	timer = setTimeout(function() {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    timer = setTimeout(function() {
       $('#'+obj.command).html('');
-	  timer = undefined;
-	}, 3000);
+      timer = undefined;
+    }, 3000);
   }
   $('#'+obj.command).html(obj.value + extra);
 }
@@ -67,7 +67,7 @@ function initGui(){
       command: this.name,
       value: this.value
     };
-	console.log('sending', JSON.stringify(json));
+    console.log('sending', JSON.stringify(json));
     socket.send(JSON.stringify(json));
   });
 }
