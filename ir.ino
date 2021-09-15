@@ -674,6 +674,8 @@ void checkNightlight(void) {
     digitalWrite(NIGHTLIGHT, nightlightState);
     // also send to main display
     printNightlight();
+    // and mqtt
+    sendNightlightMqtt();
   }
   else if (hours == config.light_off_hour && lastMinutes == config.light_off_minute) {
     // time to turn the light off
@@ -682,15 +684,25 @@ void checkNightlight(void) {
     digitalWrite(NIGHTLIGHT, nightlightState);
     // also send to main display
     printNightlight();
+    // and mqtt
+    sendNightlightMqtt();
   }
 }
 
 
 void printNightlight() {
-  if (webClient == -1)
-    return;
+  if (webClient != -1) {
+    sendWeb("nightlight", nightlightState ? "1" : "0");
+  }
+}
 
-  sendWeb("nightlight", nightlightState ? "1" : "0");
+void sendNightlightMqtt() {
+  // mqtt
+  if (config.use_mqtt) {
+    char topic[30];
+    sprintf(topic, "%s/nightlight", config.host_name);
+    client.publish(topic, ((nightlightState == LOW) ? "off" : "on"));
+  }
 }
 
 
