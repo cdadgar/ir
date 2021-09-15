@@ -993,12 +993,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           digitalWrite(NIGHTLIGHT, nightlightState);
           Serial.printf("nightlight %d\n", nightlightState);
 
-          // mqtt
-          if (config.use_mqtt) {
-            char topic[30];
-            sprintf(topic, "%s/nightlight", config.host_name);
-            client.publish(topic, ((nightlightState == LOW) ? "off" : "on"));
-          }
+          sendNightlightMqtt();
         }
       }
       else if (num == setupClient) {
