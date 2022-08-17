@@ -300,8 +300,8 @@ void loadConfig(void) {
   Serial.printf("mqqt_ip_addr %s\n", config.mqtt_ip_addr);
   Serial.printf("mqtt_ip_port %d\n", config.mqtt_ip_port);
   Serial.printf("use_light %d\n", config.use_light);
-  Serial.printf("light_on %d:%d\n", config.light_on_hour, config.light_on_minute);
-  Serial.printf("light_off %d:%d\n", config.light_off_hour, config.light_off_minute);
+  Serial.printf("light_on %02d:%02d\n", config.light_on_hour, config.light_on_minute);
+  Serial.printf("light_off %02d:%02d\n", config.light_off_hour, config.light_off_minute);
 }
 
 
@@ -937,11 +937,11 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         sprintf(json+strlen(json), ",\"mqtt_ip_port\":\"%d\"", config.mqtt_ip_port);
         sprintf(json+strlen(json), ",\"use_light\":\"%d\"", config.use_light);
         if (config.light_on_hour != 255 && config.light_on_minute != 255) 
-          sprintf(json+strlen(json), ",\"light_on\":\"%d:%d\"", config.light_on_hour, config.light_on_minute);
+          sprintf(json+strlen(json), ",\"light_on\":\"%02d:%02d\"", config.light_on_hour, config.light_on_minute);
         else
           sprintf(json+strlen(json), ",\"light_on\":\"\"");
         if (config.light_off_hour != 255 && config.light_off_minute != 255) 
-          sprintf(json+strlen(json), ",\"light_off\":\"%d:%d\"", config.light_off_hour, config.light_off_minute);
+          sprintf(json+strlen(json), ",\"light_off\":\"%02d:%02d\"", config.light_off_hour, config.light_off_minute);
         else
           sprintf(json+strlen(json), ",\"light_off\":\"\"");
         sprintf(json+strlen(json), ",\"ssid\":\"%s\"", ssid.c_str());
@@ -1054,8 +1054,8 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
           Serial.printf("mqtt_ip_addr %s\n", config.mqtt_ip_addr);
           Serial.printf("mqtt_ip_port %d\n", config.mqtt_ip_port);
           Serial.printf("use_light %d\n", config.use_light);
-          Serial.printf("light_on %d:%d\n", config.light_on_hour, config.light_on_minute);
-          Serial.printf("light_off %d:%d\n", config.light_off_hour, config.light_off_minute);
+          Serial.printf("light_on %02d:%02d\n", config.light_on_hour, config.light_on_minute);
+          Serial.printf("light_off %02d:%02d\n", config.light_off_hour, config.light_off_minute);
           saveConfig();
         }
       }
